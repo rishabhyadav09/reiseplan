@@ -2,7 +2,7 @@ app = "reiseplan-uat"          # change to your app name
 primary_region = "fra"          # Frankfurt: closest to both DB's API and your testers
 
 [build]
-  dockerfile = "backend/Dockerfile"
+  dockerfile = "Dockerfile"
 
 [env]
   # The shared DB instance is fine for a ten-person UAT round. It is rate

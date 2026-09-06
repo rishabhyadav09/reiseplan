@@ -18,7 +18,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: backend/Dockerfile
+      dockerfile: Dockerfile
     environment:
       DB_API_BASE: http://db-api:3000
       REDIS_URL: redis://redis:6379/0

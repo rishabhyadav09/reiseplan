@@ -1,3 +1,7 @@
+# Lives at the repo root deliberately. When the Dockerfile sits in a
+# subdirectory, Railway roots the build context there, so `COPY backend/...`
+# resolves to backend/backend/... and fails. Root Dockerfile, root context,
+# and both `backend/` and `web/` are reachable.
 FROM python:3.12-slim
 WORKDIR /srv
 ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
@@ -5,7 +9,7 @@ ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 ARG BUILD_SHA=dev
 ENV BUILD_SHA=$BUILD_SHA
 
-COPY backend/pyproject.toml .
+COPY backend/pyproject.toml ./pyproject.toml
 RUN pip install fastapi "uvicorn[standard]" httpx pydantic redis
 
 COPY backend/app ./app
