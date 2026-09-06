@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reiseplan — door-to-door travel across Germany</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#E9EBE6; --card:#FDFDFC; --ink:#1B1E1C; --ink-soft:#5B615A;
+    --rule:#C9CCC5;
+    --rail:#1F5C43; --regional:#42707F; --air:#B4681B; --coach:#6A4A86;
+    --moving:#1F5C43; --waiting:#A8AEA4; --queue:#B4681B;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:Archivo,system-ui,sans-serif; font-size:16px; line-height:1.55;
+    font-variant-numeric:tabular-nums lining-nums;
+  }
+  .wrap{max-width:62rem;margin:0 auto;padding:2rem 1.25rem 5rem}
+  h1{font-size:1.45rem;font-weight:600;letter-spacing:-.015em;margin:0 0 .3rem}
+  .sub{color:var(--ink-soft);margin:0 0 2rem;max-width:44ch}
+
+  form{background:var(--card);border:1px solid var(--rule);padding:1.1rem;margin-bottom:1.5rem}
+  .grid{display:grid;gap:.85rem;grid-template-columns:1fr}
+  @media(min-width:36rem){.grid{grid-template-columns:1fr 1fr}}
+  @media(min-width:52rem){.grid{grid-template-columns:1fr 1fr 1fr}}
+  label{display:block;font-size:.8rem;color:var(--ink-soft);margin-bottom:.3rem}
+  input,select{
+    width:100%;padding:.55rem .6rem;font:inherit;font-size:.95rem;
+    background:#fff;border:1px solid var(--rule);color:var(--ink);border-radius:0;
+  }
+  input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--rail);outline-offset:1px}
+  .toggles{display:flex;flex-wrap:wrap;gap:1rem;margin-top:.9rem;font-size:.9rem}
+  .toggles label{display:flex;align-items:center;gap:.4rem;margin:0;color:var(--ink)}
+  .toggles input{width:auto}
+  button.go{
+    margin-top:1rem;padding:.6rem 1.4rem;font:inherit;font-weight:500;
+    background:var(--rail);color:#fff;border:1px solid var(--rail);cursor:pointer;
+  }
+  button.go:hover{background:#17452F}
+  button.go[disabled]{opacity:.5;cursor:progress}
+
+  .legend{display:flex;gap:1.1rem;font-size:.8rem;color:var(--ink-soft);margin:0 0 .9rem}
+  .legend span{display:flex;align-items:center;gap:.35rem}
+  .sw{width:.7rem;height:.7rem;display:inline-block}
+
+  .opt{background:var(--card);border:1px solid var(--rule);border-left:4px solid var(--rule);padding:1rem 1.1rem;margin-bottom:.8rem}
+  .opt[data-mode="rail"]{border-left-color:var(--rail)}
+  .opt[data-mode="rail_regional"]{border-left-color:var(--regional)}
+  .opt[data-mode="night_rail"]{border-left-color:var(--regional)}
+  .opt[data-mode="air"]{border-left-color:var(--air)}
+  .opt[data-mode="coach"]{border-left-color:var(--coach)}
+
+  .head{display:flex;align-items:baseline;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+  .name{font-weight:600;font-size:1.05rem}
+  .figs{display:flex;gap:1.2rem;align-items:baseline}
+  .price{font-size:1.35rem;font-weight:600}
+  .dur{font-size:1rem;color:var(--ink-soft)}
+  .tag{font-size:.72rem;padding:.1rem .45rem;border:1px solid var(--rule);color:var(--ink-soft);vertical-align:.15em}
+  .tag.live{border-color:var(--rail);color:var(--rail)}
+
+  .bar{display:flex;height:14px;margin:.85rem 0 .5rem;background:#EFF1ED}
+  .bar i{display:block;height:100%;transform-origin:left;animation:grow .45s ease-out both}
+  @keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+  @media(prefers-reduced-motion:reduce){.bar i{animation:none}}
+
+  details{margin-top:.6rem}
+  summary{cursor:pointer;font-size:.85rem;color:var(--ink-soft)}
+  table{width:100%;border-collapse:collapse;font-size:.88rem;margin-top:.6rem}
+  td{padding:.22rem 0;border-bottom:1px solid #EFF1ED}
+  td:last-child{text-align:right;font-weight:500}
+  .note{font-size:.83rem;color:var(--ink-soft);margin:.5rem 0 0}
+  .msg{padding:1rem;border:1px solid var(--rule);background:var(--card);color:var(--ink-soft)}
+  a{color:var(--rail)}
+
+  .gate{position:fixed;inset:0;background:var(--paper);display:grid;place-items:center;padding:1.25rem;z-index:20}
+  .gate .box{background:var(--card);border:1px solid var(--rule);padding:1.6rem;max-width:24rem;width:100%}
+  .gate h2{font-size:1.1rem;font-weight:600;margin:0 0 .4rem}
+  .gate p{color:var(--ink-soft);font-size:.9rem;margin:0 0 1rem}
+  .err{color:#8E2A1C;font-size:.85rem;margin:.6rem 0 0;min-height:1.2em}
+  .who{font-size:.8rem;color:var(--ink-soft);margin-bottom:1.2rem}
+
+  .fb{background:var(--card);border:1px solid var(--rule);padding:1rem 1.1rem;margin-top:1.4rem}
+  .fb h3{font-size:.95rem;font-weight:600;margin:0 0 .2rem}
+  .fb p{font-size:.85rem;color:var(--ink-soft);margin:0 0 .8rem}
+  .verdicts{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.7rem}
+  .verdicts button{padding:.4rem .9rem;font:inherit;font-size:.88rem;background:#fff;
+    border:1px solid var(--rule);cursor:pointer}
+  .verdicts button[aria-pressed="true"]{background:var(--rail);border-color:var(--rail);color:#fff}
+  .fb textarea{width:100%;min-height:4.5rem;padding:.55rem .6rem;font:inherit;font-size:.92rem;
+    border:1px solid var(--rule);background:#fff;resize:vertical}
+  .fb .send{margin-top:.6rem;padding:.45rem 1.1rem;font:inherit;background:var(--ink);color:#fff;
+    border:1px solid var(--ink);cursor:pointer}
+  .fb .send[disabled]{opacity:.45;cursor:not-allowed}
+  [hidden]{display:none !important}
+</style>
+</head>
+<body>
+<div class="gate" id="gate" hidden>
+  <div class="box">
+    <h2>Reiseplan is invite-only right now</h2>
+    <p>Enter the access code from your invite. One round, closed group.</p>
+    <label for="code">Access code</label>
+    <input id="code" data-testid="access-code" autocomplete="one-time-code" autofocus>
+    <button class="go" id="enter" data-testid="enter" style="margin-top:.9rem;width:100%">Start testing</button>
+    <p class="err" id="gate-err" data-testid="gate-error" role="alert"></p>
+  </div>
+</div>
+
+<div class="wrap" id="app" hidden>
+  <h1>Reiseplan</h1>
+  <p class="sub">Trains, coaches and flights across Germany, ranked by what the
+    journey actually costs you in money and hours from your front door.</p>
+  <p class="who" id="who" data-testid="who"></p>
+
+  <form id="q">
+    <div class="grid">
+      <div><label for="origin">Leaving from</label><input id="origin" data-testid="origin" list="cities" value="Dortmund" autocomplete="off"></div>
+      <div><label for="destination">Going to</label><input id="destination" data-testid="destination" list="cities" value="München" autocomplete="off"></div>
+      <div><label for="depart">Departing after</label><input id="depart" data-testid="depart" type="datetime-local"></div>
+      <div><label for="preset">Optimise for</label>
+        <select id="preset" data-testid="preset">
+          <option value="balanced">A sensible balance</option>
+          <option value="cheapest">The lowest total spend</option>
+          <option value="fastest">Getting there soonest</option>
+          <option value="laptop">Hours I can work</option>
+          <option value="low_carbon">The smallest footprint</option>
+        </select></div>
+      <div><label for="vot">An hour of my time is worth (€)</label><input id="vot" data-testid="vot" type="number" min="0" max="500" step="1" value="16"></div>
+    </div>
+    <div class="toggles">
+      <label><input type="checkbox" id="bag" data-testid="bag"> I'm checking a bag</label>
+      <label><input type="checkbox" id="dticket" data-testid="dticket"> I have a Deutschlandticket</label>
+      <label><input type="checkbox" id="bc50"> I have a BahnCard 50</label>
+    </div>
+    <button class="go" type="submit" data-testid="compare">Compare routes</button>
+  </form>
+
+  <datalist id="cities"></datalist>
+  <div id="out" data-testid="results"></div>
+  <div id="fb-slot"></div>
+</div>
+
+<script>
+const API = location.origin;
+const J = (u, o = {}) => fetch(API + u, { credentials: 'include', ...o });
+let LAST = null;
+const $ = id => document.getElementById(id);
+const euro = c => '€' + (c/100).toFixed(2);
+const hm = m => `${Math.floor(m/60)}h ${String(Math.round(m%60)).padStart(2,'0')}m`;
+
+const MODE_NAME = {
+  rail:'Train', rail_regional:'Regional trains', night_rail:'Night train',
+  air:'Flight', coach:'Coach'
+};
+const SEG_COLOR = {
+  ride:'var(--moving)', access:'var(--waiting)', egress:'var(--waiting)',
+  transfer:'var(--waiting)', checkin:'var(--queue)', disembark:'var(--queue)'
+};
+
+async function boot() {
+  try {
+    const r = await J('/api/me');
+    if (r.ok) { const me = await r.json(); showApp(me.tester, me.build); return; }
+  } catch (e) { /* fall through to the gate */ }
+  $('gate').hidden = false;
+}
+function showApp(tester, build) {
+  $('gate').hidden = true;
+  $('app').hidden = false;
+  $('who').textContent = `Signed in as ${tester} · build ${build || 'dev'}`;
+}
+$('enter').addEventListener('click', async () => {
+  $('gate-err').textContent = '';
+  const r = await J('/api/login', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ code: $('code').value.trim() }),
+  });
+  if (!r.ok) { $('gate-err').textContent = 'That code is not valid for this round.'; return; }
+  const me = await r.json();
+  showApp(me.tester);
+});
+$('code').addEventListener('keydown', e => { if (e.key === 'Enter') $('enter').click(); });
+boot();
+
+const d = new Date(Date.now() + 21*864e5);
+d.setHours(8,0,0,0);
+$('depart').value = new Date(d - d.getTimezoneOffset()*6e4).toISOString().slice(0,16);
+
+fetch(API + '/api/cities').then(r => r.json()).then(cs => {
+  $('cities').innerHTML = cs.map(c => `<option value="${c.name}">`).join('');
+}).catch(() => {});
+
+$('q').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = document.querySelector('.go');
+  btn.disabled = true; btn.textContent = 'Checking…';
+  $('out').innerHTML = '<div class="msg">Asking Deutsche Bahn and pricing the alternatives…</div>';
+
+  const p = new URLSearchParams({
+    origin: $('origin').value, destination: $('destination').value,
+    depart: $('depart').value, preset: $('preset').value,
+    vot_cents: Math.round(($('vot').value || 0) * 100),
+    checked_bag: $('bag').checked, deutschlandticket: $('dticket').checked,
+    bahncard: $('bc50').checked ? 50 : 0,
+  });
+
+  try {
+    const res = await J(`/api/plan?${p}`);
+    if (res.status === 401) { $('gate').hidden = false; $('app').hidden = true; return; }
+    const body = await res.json();
+    LAST = { query: Object.fromEntries(p), body };
+    if (!res.ok) { $('out').innerHTML = `<div class="msg">${body.detail || 'That search did not work.'}</div>`; return; }
+    render(body);
+  } catch (err) {
+    $('out').innerHTML = '<div class="msg">The service is unreachable. Is the backend running?</div>';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Compare routes';
+  }
+});
+
+function render(body) {
+  if (!body.options.length) {
+    $('out').innerHTML = '<div class="msg">Nothing came back for that pair. The DB API rate limits hard — try again in a minute.</div>';
+    return;
+  }
+  const longest = Math.max(...body.options.map(o => o.door_to_door_minutes));
+
+  const legend = `<div class="legend">
+    <span><i class="sw" style="background:var(--moving)"></i>Moving</span>
+    <span><i class="sw" style="background:var(--waiting)"></i>Getting there and waiting</span>
+    <span><i class="sw" style="background:var(--queue)"></i>Queueing</span>
+  </div>`;
+
+  $('out').innerHTML = legend + body.options.map(o => {
+    const segs = o.legs.map(l =>
+      `<i style="flex:${Math.max(l.minutes, 0.5)};background:${SEG_COLOR[l.kind]}" title="${l.label} · ${hm(l.minutes)}"></i>`
+    ).join('') + `<i style="flex:${Math.max(0.001, longest - o.door_to_door_minutes)};background:transparent"></i>`;
+
+    const bill = o.cost_lines.map(c =>
+      `<tr><td>${c.label}</td><td>${c.cents < 0 ? '−' + euro(-c.cents) : euro(c.cents)}</td></tr>`).join('');
+    const timeline = o.legs.map(l =>
+      `<tr><td>${l.label}</td><td>${hm(l.minutes)}</td></tr>`).join('');
+
+    return `<article class="opt" data-testid="option" data-mode="${o.mode}">
+      <div class="head">
+        <div>
+          <span class="name">${MODE_NAME[o.mode] || o.mode}</span>
+          <span class="tag ${o.confidence === 'live' ? 'live' : ''}">${o.confidence === 'live' ? 'live fare' : o.confidence}</span>
+        </div>
+        <div class="figs">
+          <span class="price" data-testid="price">${euro(o.total_cents)}</span>
+          <span class="dur" data-testid="duration">${hm(o.door_to_door_minutes)} door to door</span>
+        </div>
+      </div>
+      <div class="bar">${segs}</div>
+      <p class="note">${o.transfers} change${o.transfers === 1 ? '' : 's'} ·
+        ${Math.round(o.productive_minutes)} min you could work ·
+        ${(o.co2_g/1000).toFixed(0)} kg CO₂ · ${o.match}% match</p>
+      <details>
+        <summary>Where the time and the money go</summary>
+        <table>${timeline}<tr><td><strong>Total</strong></td><td>${hm(o.door_to_door_minutes)}</td></tr></table>
+        <table>${bill}<tr><td><strong>Out of pocket</strong></td><td>${euro(o.total_cents)}</td></tr></table>
+        ${o.notes.map(n => `<p class="note">${n}</p>`).join('')}
+        ${o.deeplink ? `<p class="note"><a href="${o.deeplink}" target="_blank" rel="noopener">Book this</a></p>` : ''}
+      </details>
+    </article>`;
+  }).join('') + (body.warnings.length
+    ? `<p class="note">${body.warnings.join(' ')}</p>` : '');
+
+  renderFeedback();
+}
+
+function renderFeedback() {
+  $('fb-slot').innerHTML = `<section class="fb" data-testid="feedback">
+    <h3>Does this ranking match your judgement?</h3>
+    <p>Say what you'd actually have booked and why. Your query and these results are attached.</p>
+    <div class="verdicts">
+      <button type="button" data-v="right"  data-testid="verdict-right"  aria-pressed="false">Ranking looks right</button>
+      <button type="button" data-v="wrong"  data-testid="verdict-wrong"  aria-pressed="false">I'd book something else</button>
+      <button type="button" data-v="unsure" data-testid="verdict-unsure" aria-pressed="false">Not sure</button>
+    </div>
+    <textarea id="fb-comment" data-testid="feedback-comment" placeholder="What would you have picked, and what tipped it?"></textarea>
+    <button class="send" id="fb-send" data-testid="feedback-send" disabled>Send feedback</button>
+    <p class="err" id="fb-msg" data-testid="feedback-status" role="status"></p>
+  </section>`;
+
+  let verdict = null;
+  $('fb-slot').querySelectorAll('.verdicts button').forEach(b => {
+    b.addEventListener('click', () => {
+      $('fb-slot').querySelectorAll('.verdicts button')
+        .forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+      verdict = b.dataset.v;
+      $('fb-send').disabled = false;
+    });
+  });
+
+  $('fb-send').addEventListener('click', async () => {
+    if (!verdict || !LAST) return;
+    $('fb-send').disabled = true;
+    const r = await J('/api/feedback', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        verdict, comment: $('fb-comment').value,
+        query: LAST.query,
+        ranking: LAST.body.options.map(o => ({
+          mode: o.mode, cents: o.total_cents,
+          minutes: o.door_to_door_minutes, match: o.match,
+        })),
+      }),
+    });
+    $('fb-msg').style.color = r.ok ? 'var(--rail)' : '#8E2A1C';
+    $('fb-msg').textContent = r.ok
+      ? 'Logged. Thanks — that is exactly what round one needs.'
+      : 'That did not save. Try again in a moment.';
+    if (!r.ok) $('fb-send').disabled = false;
+  });
+}
+</script>
+</body>
+</html>

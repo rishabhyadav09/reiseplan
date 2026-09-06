@@ -1,0 +1,30 @@
+services:
+  # Your own DB API instance. Strongly preferred over the shared
+  # v6.db.transport.rest, which is rate limited to 100 req/min for the
+  # entire internet and will throttle you within minutes of real traffic.
+  db-api:
+    image: ghcr.io/public-transport/db-vendo-client:latest
+    environment:
+      USER_AGENT: "reiseplan-poc (you@example.com)"
+      DB_PROFILE: dbnav
+    ports: ["3000:3000"]
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server","--save","","--appendonly","no"]
+    ports: ["6379:6379"]
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DB_API_BASE: http://db-api:3000
+      REDIS_URL: redis://redis:6379/0
+      USER_AGENT: "reiseplan-poc (you@example.com)"
+      DB_MAX_CONCURRENCY: "4"
+    volumes:
+      - ./web:/web:ro
+    ports: ["8000:8000"]
+    depends_on: [db-api, redis]

@@ -1,0 +1,38 @@
+app = "reiseplan-uat"          # change to your app name
+primary_region = "fra"          # Frankfurt: closest to both DB's API and your testers
+
+[build]
+  dockerfile = "backend/Dockerfile"
+
+[env]
+  # The shared DB instance is fine for a ten-person UAT round. It is rate
+  # limited to 100 req/min for the entire internet, so it is NOT fine for
+  # public release — run your own db-vendo-client before then.
+  DB_API_BASE = "https://v6.db.transport.rest"
+  DATABASE_PATH = "/data/uat.db"
+  COOKIE_SECURE = "true"
+  DB_MAX_CONCURRENCY = "3"
+
+# UAT_CODES and SESSION_SECRET are set via `flyctl secrets set`, never here.
+
+[[mounts]]
+  source = "reiseplan_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 1      # keep one warm; a cold start looks like a bug to a tester
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/healthz"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

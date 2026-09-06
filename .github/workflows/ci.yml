@@ -1,0 +1,56 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e "backend[dev]"
+      - name: Lint
+        run: ruff check backend/app backend/tests
+      - name: Unit and scenario tests
+        run: cd backend && python -m pytest -q --junitxml=results.xml
+        env:
+          DATABASE_PATH: /tmp/ci-uat.db
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pytest-results
+          path: backend/results.xml
+
+  e2e-smoke:
+    # Runs the browser suite against a throwaway local server, so a broken
+    # frontend fails the PR before anything reaches BrowserStack minutes.
+    runs-on: ubuntu-latest
+    needs: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: npm, cache-dependency-path: e2e/package.json }
+      - run: pip install -e backend
+      - run: cd e2e && npm install && npx playwright install --with-deps chromium
+      - name: Boot the app
+        run: |
+          cd backend
+          UAT_CODES="ci:round1-ci" SESSION_SECRET=ci-secret \
+          COOKIE_SECURE=false DATABASE_PATH=/tmp/e2e.db \
+          uvicorn app.main:app --port 8000 &
+          npx -y wait-on http://localhost:8000/healthz -t 30000
+      - run: cd e2e && npx playwright test --project=chromium
+        env:
+          BASE_URL: http://localhost:8000
+          UAT_TEST_CODE: round1-ci
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: playwright-report, path: e2e/playwright-report }

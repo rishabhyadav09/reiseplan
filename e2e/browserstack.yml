@@ -1,0 +1,54 @@
+# BrowserStack SDK config. Run with:
+#   npx browserstack-node-sdk playwright test
+#
+# The SDK injects capabilities, so playwright.config.ts stays a plain local
+# config and the same specs run unchanged on your laptop and on BrowserStack.
+
+userName: ${BROWSERSTACK_USERNAME}
+accessKey: ${BROWSERSTACK_ACCESS_KEY}
+
+projectName: Reiseplan
+buildName: reiseplan-uat
+# Keeps reruns of the same commit grouped instead of creating a new build each time.
+buildIdentifier: ${BUILD_NUMBER:-local}
+
+framework: playwright
+
+# FREE TRIAL BUDGET: Automate gives 100 total minutes and ONE parallel
+# session. The full suite is 46 tests; at ~4s each that is ~3 min per
+# platform, so four platforms x repeated runs exhausts the trial in a day.
+#
+# Two platforms, smoke tests only (`--grep @smoke`, 7 tests). That is roughly
+# 2 minutes per run and leaves headroom for ~40 runs. Add platforms back when
+# you are on a paid plan.
+platforms:
+  - os: Windows
+    osVersion: 11
+    browserName: chrome
+    browserVersion: latest
+  - os: OS X
+    osVersion: Sonoma
+    browserName: playwright-webkit   # Safari's engine: the one that actually
+    browserVersion: latest           # breaks date inputs and SameSite cookies
+
+# Real mobile devices under Playwright depend on your account tier. Verify in
+# the dashboard before uncommenting; if it is not enabled, cover mobile with
+# the emulated viewport project in playwright.config.ts instead.
+#  - deviceName: iPhone 15
+#    osVersion: 17
+#    browserName: safari
+#  - deviceName: Samsung Galaxy S23
+#    osVersion: 13.0
+#    browserName: chrome
+
+parallelsPerPlatform: 1   # trial allows exactly one
+
+# The UAT build is public (gated by invite code), so no tunnel is needed.
+# Flip this to true when testing a preview deploy that is not internet-facing.
+browserstackLocal: false
+
+testObservability: true
+debug: false            # screenshots on every command — noisy and slow
+networkLogs: false
+consoleLogs: errors
+video: false            # video costs minutes on the trial

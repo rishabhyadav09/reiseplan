@@ -1,0 +1,69 @@
+name: deploy and browserstack
+
+# Deploys the UAT build, waits for it to be healthy, then runs the browser
+# matrix against the real deployed URL. BrowserStack only ever sees a build
+# that already passed unit tests and a local Chromium smoke run.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      full_matrix:
+        description: Run every BrowserStack platform, not just Chrome
+        type: boolean
+        default: false
+
+concurrency:
+  group: uat-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    outputs:
+      url: ${{ steps.out.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Push secrets before deploying
+        run: |
+          flyctl secrets set --stage \
+            UAT_CODES="${{ secrets.UAT_CODES }}" \
+            SESSION_SECRET="${{ secrets.SESSION_SECRET }}" \
+            BUILD_SHA="${GITHUB_SHA::7}"
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - run: flyctl deploy --remote-only --build-arg BUILD_SHA=${GITHUB_SHA::7}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - id: out
+        run: echo "url=https://${{ vars.FLY_APP_NAME }}.fly.dev" >> "$GITHUB_OUTPUT"
+      - name: Wait for the new build to answer
+        run: |
+          for i in $(seq 1 30); do
+            sha=$(curl -fsS "${{ steps.out.outputs.url }}/healthz" | jq -r .build || true)
+            [ "$sha" = "${GITHUB_SHA::7}" ] && echo "live" && exit 0
+            sleep 5
+          done
+          echo "deployed build never reported the expected sha" && exit 1
+
+  browserstack:
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: npm, cache-dependency-path: e2e/package.json }
+      - run: cd e2e && npm install
+      - name: Run the matrix on BrowserStack
+        run: cd e2e && npx browserstack-node-sdk playwright test --grep @smoke
+        env:
+          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+          BASE_URL: ${{ needs.deploy.outputs.url }}
+          UAT_TEST_CODE: ${{ secrets.UAT_TEST_CODE }}
+          BUILD_NUMBER: ${{ github.run_number }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: browserstack-results, path: e2e/results }
