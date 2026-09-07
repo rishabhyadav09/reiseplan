@@ -181,7 +181,18 @@ def _fare_cents(itin: dict) -> tuple[int | None, bool]:
     return (total, True) if found and total > 0 else (None, False)
 
 
-def itinerary_from_motis(itin: dict, *, deutschlandticket: bool = False) -> Itinerary | None:
+PLACEHOLDER_NAMES = {"START", "END", "", None}
+
+
+def _place_name(place: dict | None, fallback: str) -> str:
+    name = (place or {}).get("name")
+    return fallback if name in PLACEHOLDER_NAMES else name
+
+
+def itinerary_from_motis(
+    itin: dict, *, deutschlandticket: bool = False,
+    origin_label: str = "your origin", destination_label: str = "your destination",
+) -> Itinerary | None:
     raw_legs = itin.get("legs") or []
     if not raw_legs:
         return None
@@ -207,18 +218,23 @@ def itinerary_from_motis(itin: dict, *, deutschlandticket: bool = False) -> Itin
 
         minutes = max(0.0, (arr - dep).total_seconds() / 60.0)
         mode = (raw.get("mode") or "").upper()
-        dest = ((raw.get("to") or {}).get("name")) or "the next stop"
+        is_last = idx == len(raw_legs) - 1
+        dest = _place_name(raw.get("to"),
+                           destination_label if is_last else "the next stop")
 
         if mode in STREET_MODES:
             kind = (LegKind.ACCESS if idx == 0
-                    else LegKind.EGRESS if idx == len(raw_legs) - 1
+                    else LegKind.EGRESS if is_last
                     else LegKind.TRANSFER)
             verb = "Walk" if mode == "WALK" else mode.replace("_", " ").title()
             legs.append(Leg(kind, f"{verb} to {dest}", round(minutes, 1)))
             continue
 
         modes_seen.add(mode)
-        name = (raw.get("routeShortName") or raw.get("displayName")
+        # displayName is "ICE 42"; routeShortName is a bare "42". MOTIS v4
+        # added displayName for exactly this reason, so it must come first or
+        # every German train renders as a meaningless number.
+        name = (raw.get("displayName") or raw.get("routeShortName")
                 or raw.get("headsign") or mode.replace("_", " ").title())
         km = _leg_km(raw)
 
@@ -322,7 +338,9 @@ class MotisProvider:
                 arrive_by=req.arrive_by, results=5,
             )
             for raw in itins:
-                it = itinerary_from_motis(raw)
+                it = itinerary_from_motis(
+                    raw, origin_label=req.origin.label,
+                    destination_label=req.destination.label)
                 if it:
                     out.append(it)
 
@@ -332,7 +350,10 @@ class MotisProvider:
                     arrive_by=req.arrive_by, results=2, regional_only=True,
                 )
                 for raw in regional:
-                    it = itinerary_from_motis(raw, deutschlandticket=True)
+                    it = itinerary_from_motis(
+                        raw, deutschlandticket=True,
+                        origin_label=req.origin.label,
+                        destination_label=req.destination.label)
                     if it:
                         out.append(it)
         except UpstreamUnavailable as exc:

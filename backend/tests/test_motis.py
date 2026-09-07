@@ -144,3 +144,27 @@ def test_transit_legs_get_emissions_from_coordinates_not_a_missing_field():
 def test_distance_field_is_still_preferred_when_present():
     it = itinerary_from_motis(itin([leg("COACH", 250, dist_m=231_000)], 250))
     assert 6000 < it.co2_g < 7500   # 231 km x 29 g/pkm
+
+
+def test_a_german_train_is_named_ICE_42_not_42():
+    """routeShortName drops the product prefix; displayName keeps it."""
+    it = itinerary_from_motis(itin([{
+        "mode": "HIGHSPEED_RAIL", "routeShortName": "42", "displayName": "ICE 42",
+        "startTime": T0.isoformat(),
+        "endTime": (T0 + timedelta(minutes=133)).isoformat(),
+        "from": {"name": "Dortmund Hbf", "lat": 51.5177, "lon": 7.4592},
+        "to": {"name": "Frankfurt(M) Flughafen", "lat": 50.0509, "lon": 8.5706},
+    }], 133))
+    assert it.legs[0].line == "ICE 42"
+
+
+def test_the_final_walk_names_the_destination_not_END():
+    """MOTIS labels query coordinates START/END. 'Walk to END' is nonsense."""
+    it = itinerary_from_motis(itin([
+        leg("HIGHSPEED_RAIL", 133, dist_m=221_000),
+        {"mode": "WALK", "startTime": (T0 + timedelta(minutes=140)).isoformat(),
+         "endTime": (T0 + timedelta(minutes=151)).isoformat(),
+         "distance": 800, "from": {"name": "Hbf"}, "to": {"name": "END"}},
+    ], 151), destination_label="Frankfurt am Main")
+    assert "END" not in it.legs[-1].label
+    assert "Frankfurt am Main" in it.legs[-1].label
