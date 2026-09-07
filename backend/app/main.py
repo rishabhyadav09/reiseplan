@@ -80,6 +80,7 @@ class PlanOut(BaseModel):
     destination: str
     depart_after: datetime
     preset: str
+    degraded: bool = False
     options: list[OptionOut]
     warnings: list[str] = Field(default_factory=list)
 
@@ -205,11 +206,17 @@ async def plan_route(
         has_bahncard=bahncard if bahncard in (25, 50) else 0,
     )
 
-    scored = await plan(req, weights_from(preset, vot_cents))
+    scored, degraded = await plan(req, weights_from(preset, vot_cents))
 
-    warnings: list[str] = []
+    warnings: list[str] = list(degraded)
     if not scored:
-        warnings.append("No options came back. The DB API may be rate limiting — retry shortly.")
+        warnings.append("No options came back for this route.")
+    elif degraded and not any(
+        s_.itinerary.mode.value.startswith("rail") for s_ in scored
+    ):
+        # The case that produced a lone 4h20 coach for Dortmund-Frankfurt.
+        warnings.insert(0, "Train options are missing because the rail lookup "
+                           "failed — the results below are NOT a fair comparison.")
     if any(s.itinerary.confidence is Confidence.MODELLED for s in scored):
         warnings.append("Options marked 'modelled' use estimated fares, not live quotes.")
 
@@ -218,6 +225,7 @@ async def plan_route(
         destination=req.destination.label,
         depart_after=depart_after,
         preset=preset,
+        degraded=bool(degraded),
         warnings=warnings,
         options=[
             OptionOut(

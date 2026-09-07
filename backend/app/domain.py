@@ -83,6 +83,20 @@ class Itinerary:
 
 
 @dataclass(frozen=True, slots=True)
+class ProviderResult:
+    """What a provider returns, including whether it could answer at all.
+
+    A provider that is DOWN and a provider that legitimately has no service on
+    a route both return zero itineraries. Conflating those two is how a coach
+    ends up presented as the best way from Dortmund to Frankfurt.
+    """
+
+    itineraries: tuple[Itinerary, ...]
+    degraded: bool = False
+    reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Place:
     """Either a catalogue city or a free-form address the user typed."""
 

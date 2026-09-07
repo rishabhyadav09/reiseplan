@@ -17,7 +17,16 @@ import logging
 from datetime import timedelta
 
 from ..config import settings
-from ..domain import Confidence, CostLine, Itinerary, Leg, LegKind, Mode, PlanRequest
+from ..domain import (
+    Confidence,
+    CostLine,
+    Itinerary,
+    Leg,
+    LegKind,
+    Mode,
+    PlanRequest,
+    ProviderResult,
+)
 from ..geo import CO2_G_PER_PKM, haversine_km
 
 log = logging.getLogger(__name__)
@@ -42,13 +51,13 @@ def _fare_cents(road_km: float, days: int) -> int:
 class CoachProvider:
     name = "coach-modelled"
 
-    async def search(self, req: PlanRequest) -> list[Itinerary]:
+    async def search(self, req: PlanRequest) -> ProviderResult:
         try:
             direct_km = haversine_km(
                 req.origin.lat, req.origin.lon, req.destination.lat, req.destination.lon
             )
             if direct_km < 70:
-                return []  # no coach market this short
+                return ProviderResult(())  # no coach market this short
 
             road_km = direct_km * ROAD_DETOUR
             ride = road_km / AVG_SPEED_KMH * 60 + (road_km / 450) * STOP_MINUTES_PER_450KM
@@ -70,7 +79,7 @@ class CoachProvider:
             if total > 600:
                 notes.append("Ten hours plus — budget a recovery day at the far end.")
 
-            return [
+            return ProviderResult((
                 Itinerary(
                     mode=Mode.COACH,
                     provider=self.name,
@@ -86,11 +95,11 @@ class CoachProvider:
                     confidence=Confidence.MODELLED,
                     deeplink="https://global.flixbus.com/",
                     notes=tuple(notes),
-                )
-            ]
-        except Exception:
+                ),
+            ))
+        except Exception as exc:
             log.exception("coach provider failed")
-            return []
+            return ProviderResult((), degraded=True, reason=f"Coach lookup failed: {exc}")
 
 
 def build_coach_provider():

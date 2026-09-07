@@ -270,8 +270,14 @@ function render(body) {
         ${o.deeplink ? `<p class="note"><a href="${o.deeplink}" target="_blank" rel="noopener">Book this</a></p>` : ''}
       </details>
     </article>`;
-  }).join('') + (body.warnings.length
-    ? `<p class="note">${body.warnings.join(' ')}</p>` : '');
+  }).join('');
+
+  if (body.warnings.length) {
+    const bad = body.degraded;
+    $('out').insertAdjacentHTML('afterbegin',
+      `<div class="msg" data-testid="warning" style="border-color:${bad ? '#8E2A1C' : 'var(--rule)'};
+        ${bad ? 'color:#8E2A1C' : ''}">${body.warnings.join(' ')}</div>`);
+  }
 
   renderFeedback();
 }

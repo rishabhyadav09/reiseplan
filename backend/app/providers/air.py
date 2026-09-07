@@ -36,6 +36,7 @@ from ..domain import (
     Mode,
     Place,
     PlanRequest,
+    ProviderResult,
 )
 from ..geo import AIR_FIXED_G, CO2_G_PER_PKM, haversine_km
 from .db_rail import fetch_journeys, journey_to_itinerary, resolve_station
@@ -113,7 +114,7 @@ async def _surface_leg(origin: Place, dest: Place, req: PlanRequest, kind: LegKi
 class AirProvider:
     name = "air-modelled"
 
-    async def search(self, req: PlanRequest) -> list[Itinerary]:
+    async def search(self, req: PlanRequest) -> ProviderResult:
         out: list[Itinerary] = []
         try:
             for dep_iata, arr_iata in _candidate_pairs(req):
@@ -178,6 +179,8 @@ class AirProvider:
                         notes=tuple(notes),
                     )
                 )
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
             log.exception("air provider failed")
-        return out
+            return ProviderResult(tuple(out), degraded=True,
+                                  reason=f"Flight lookup failed: {exc}")
+        return ProviderResult(tuple(out))

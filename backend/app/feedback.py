@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
 
@@ -63,7 +63,7 @@ def record(
             "INSERT INTO feedback (created_at, tester, verdict, comment, query, ranking, build)"
             " VALUES (?,?,?,?,?,?,?)",
             (
-                datetime.now(timezone.utc).isoformat(),
+                datetime.now(UTC).isoformat(),
                 tester, verdict, (comment or "").strip()[:2000],
                 json.dumps(query, default=str),
                 json.dumps(ranking, default=str)[:20000],

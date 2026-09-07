@@ -36,21 +36,31 @@ def _trim(scored: list[Scored]) -> list[Scored]:
     return out
 
 
-async def plan(req: PlanRequest, weights: Weights) -> list[Scored]:
+async def plan(req: PlanRequest, weights: Weights) -> tuple[list[Scored], list[str]]:
+    """Return the ranking and any degradation notices.
+
+    The notices matter as much as the ranking. If rail is down, a coach at the
+    top of the list is not an answer — it is the absence of one, and the caller
+    has to be able to say so.
+    """
     results = await asyncio.gather(
         *(p.search(req) for p in PROVIDERS), return_exceptions=True
     )
 
     itineraries: list[Itinerary] = []
+    degraded: list[str] = []
     for provider, result in zip(PROVIDERS, results, strict=True):
         if isinstance(result, BaseException):
             log.warning("provider %s raised: %s", provider.name, result)
+            degraded.append(f"{provider.name} failed unexpectedly.")
             continue
-        itineraries.extend(result)
+        itineraries.extend(result.itineraries)
+        if result.degraded and result.reason:
+            degraded.append(result.reason)
 
     if not itineraries:
-        return []
-    return _trim(rank(itineraries, weights, checked_bag=req.checked_bag))
+        return [], degraded
+    return _trim(rank(itineraries, weights, checked_bag=req.checked_bag)), degraded
 
 
 def weights_from(preset: str, vot_cents: int | None) -> Weights:

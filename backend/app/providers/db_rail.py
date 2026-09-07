@@ -26,9 +26,10 @@ from ..domain import (
     Mode,
     Place,
     PlanRequest,
+    ProviderResult,
 )
 from ..geo import CO2_G_PER_PKM, haversine_km
-from .base import db_get
+from .base import UpstreamUnavailable, db_get
 
 log = logging.getLogger(__name__)
 
@@ -54,7 +55,11 @@ async def resolve_station(query: str) -> str | None:
     ck = key_for("loc", {"q": query})
 
     async def fetch():
-        data = await db_get("/locations", {"query": query, "results": 1, "poi": "false", "addresses": "false"})
+        try:
+            data = await db_get("/locations", {"query": query, "results": 1,
+                                               "poi": "false", "addresses": "false"})
+        except UpstreamUnavailable:
+            return None
         if isinstance(data, list) and data:
             return data[0].get("id")
         return None
@@ -90,7 +95,7 @@ async def fetch_journeys(
     ck = key_for("journeys", params)
 
     async def fetch():
-        data = await db_get("/journeys", params)
+        data = await db_get("/journeys", params)   # may raise UpstreamUnavailable
         if isinstance(data, dict):
             return data.get("journeys") or []
         return []
@@ -114,7 +119,7 @@ def _parse_ts(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return datetime.fromisoformat(value)
     except ValueError:
         return None
 
@@ -231,7 +236,7 @@ def journey_to_itinerary(journey: dict, *, deutschlandticket: bool = False) -> I
 class DBRailProvider:
     name = "deutsche-bahn"
 
-    async def search(self, req: PlanRequest) -> list[Itinerary]:
+    async def search(self, req: PlanRequest) -> ProviderResult:
         out: list[Itinerary] = []
         try:
             journeys = await fetch_journeys(
@@ -251,6 +256,10 @@ class DBRailProvider:
                     it = journey_to_itinerary(j, deutschlandticket=True)
                     if it:
                         out.append(it)
-        except Exception:
+        except UpstreamUnavailable as exc:
+            log.warning("db unavailable: %s", exc)
+            return ProviderResult((), degraded=True, reason=str(exc))
+        except Exception as exc:  # noqa: BLE001
             log.exception("db provider failed")
-        return out
+            return ProviderResult((), degraded=True, reason=f"Rail lookup failed: {exc}")
+        return ProviderResult(tuple(out))
