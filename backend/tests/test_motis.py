@@ -87,11 +87,14 @@ def test_long_distance_time_is_productive_but_a_short_tram_is_not():
     assert it.productive_minutes == 130.0
 
 
-def test_missing_fare_data_says_so_instead_of_inventing_one():
+def test_missing_fare_data_is_estimated_as_a_band_not_shown_as_zero():
+    """EUR 0.00 reads as free and is useless for ranking. A band from the
+    published tariff is usable and honest, provided it says what it is."""
     it = itinerary_from_motis(itin([leg("HIGHSPEED_RAIL", 130, dist_m=221_000)], 130))
-    assert it.total_cents == 0
-    assert it.confidence is Confidence.SCHEDULE
-    assert any("no fare data" in n.lower() for n in it.notes)
+    assert 1790 <= it.total_cents <= 9000, it.total_cents
+    assert it.confidence is Confidence.SCHEDULE      # never claims to be live
+    assert any("estimated" in n.lower() for n in it.notes)
+    assert any("–" in c.label for c in it.cost_lines), "the band must be visible"
 
 
 def test_a_published_gtfs_fare_is_used_and_marked_live():
