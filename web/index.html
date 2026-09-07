@@ -108,6 +108,15 @@
   .ac li small{display:block;color:var(--ink-soft);font-size:.76rem}
   #map{height:220px;margin-top:.7rem;border:1px solid var(--rule);background:#EFF1ED}
   .leaflet-container{font:inherit}
+  #tabs button[aria-pressed="true"]{background:var(--rail) !important;border-color:var(--rail) !important;color:#fff}
+  .dest{background:var(--card);border:1px solid var(--rule);border-left:4px solid var(--rail);
+    padding:.8rem 1rem;margin-bottom:.5rem;display:flex;gap:1rem;align-items:baseline}
+  .dest[data-mode="flight"]{border-left-color:var(--air)}
+  .dest .who{flex:1;margin:0}
+  .dest b{font-weight:600;font-size:1rem;color:var(--ink)}
+  .dest small{display:block;color:var(--ink-soft);font-size:.82rem;margin-top:.1rem}
+  .dest .f{font-weight:600;font-size:1.05rem;white-space:nowrap}
+  .dest .t{color:var(--ink-soft);font-size:.85rem;white-space:nowrap}
 </style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
@@ -129,6 +138,23 @@
   <p class="sub">Trains, coaches and flights across Germany, ranked by what the
     journey actually costs you in money and hours from your front door.</p>
   <p class="who" id="who" data-testid="who"></p>
+
+  <div style="display:flex;gap:.4rem;margin-bottom:1rem" id="tabs">
+    <button class="chip" type="button" data-tab="route" data-testid="tab-route" aria-pressed="true"
+      style="padding:.45rem 1rem;font-size:.9rem;border:1px solid var(--rule);background:#fff;cursor:pointer">A specific trip</button>
+    <button class="chip" type="button" data-tab="anywhere" data-testid="tab-anywhere" aria-pressed="false"
+      style="padding:.45rem 1rem;font-size:.9rem;border:1px solid var(--rule);background:#fff;cursor:pointer">Anywhere</button>
+  </div>
+
+  <form id="aw" hidden>
+    <div class="grid">
+      <div class="ac"><label for="aw-origin">Leaving from</label><input id="aw-origin" data-testid="aw-origin" value="Dortmund" autocomplete="off"></div>
+      <div><label for="aw-budget">Budget, one way (€)</label><input id="aw-budget" data-testid="aw-budget" type="number" min="10" max="900" value="80"></div>
+      <div><label for="aw-hours">At most (hours)</label><input id="aw-hours" data-testid="aw-hours" type="number" min="1" max="24" step="0.5" value="6"></div>
+      <div><label for="aw-days">Booking this far ahead (days)</label><input id="aw-days" data-testid="aw-days" type="number" min="0" max="365" value="21"></div>
+    </div>
+    <button class="go" type="submit" data-testid="aw-go">Show me somewhere to go</button>
+  </form>
 
   <form id="q">
     <div class="grid">
@@ -269,7 +295,62 @@ function attachAutocomplete(id) {
   input.addEventListener('blur', () => setTimeout(close, 120));
 }
 attachAutocomplete('origin');
+attachAutocomplete('aw-origin');
 attachAutocomplete('destination');
+
+$('tabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-tab]'); if (!b) return;
+  [...$('tabs').children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  const anywhere = b.dataset.tab === 'anywhere';
+  $('aw').hidden = !anywhere;
+  $('q').hidden = anywhere;
+  $('out').innerHTML = '';
+  $('fb-slot').innerHTML = '';
+});
+
+$('aw').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('out').innerHTML = '<div class="msg">Pricing a few hundred destinations…</div>';
+  const p = new URLSearchParams({
+    origin: $('aw-origin').value,
+    max_fare: $('aw-budget').value,
+    max_hours: $('aw-hours').value,
+    days_ahead: $('aw-days').value,
+    limit: 40,
+  });
+  const pick = PICKED['aw-origin'];
+  if (pick) { p.set('origin_lat', pick.lat); p.set('origin_lon', pick.lon); }
+  try {
+    const r = await J('/api/anywhere?' + p);
+    const body = await r.json();
+    if (!r.ok) { $('out').innerHTML = `<div class="msg">${body.detail || 'That did not work.'}</div>`; return; }
+    if (!body.destinations.length) {
+      $('out').innerHTML = '<div class="msg">Nothing within that budget and time. Try loosening one.</div>';
+      return;
+    }
+    $('out').innerHTML = `<p class="note" style="margin-bottom:.8rem">${body.count} places from ${body.origin}. ${body.disclaimer}</p>`
+      + body.destinations.map(d => `<article class="dest" data-mode="${d.mode}" data-testid="dest">
+          <p class="who"><b>${d.name}</b><small>${d.blurb} · ${d.km} km by ${d.mode}${d.note ? ' · ' + d.note : ''}</small></p>
+          <span class="f">${d.fare_label}</span>
+          <span class="t">${d.hours}h</span>
+        </article>`).join('');
+    $('out').querySelectorAll('.dest').forEach((el, i) => {
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', () => {
+        // Cheap pass shortlists; tapping runs the real routing.
+        const d = body.destinations[i];
+        [...$('tabs').children].forEach(x => x.setAttribute('aria-pressed', String(x.dataset.tab === 'route')));
+        $('aw').hidden = true; $('q').hidden = false;
+        $('origin').value = $('aw-origin').value;
+        $('destination').value = d.name;
+        PICKED.destination = { id: null, name: d.name, lat: d.lat, lon: d.lon };
+        $('q').dispatchEvent(new Event('submit'));
+      });
+    });
+  } catch (err) {
+    $('out').innerHTML = '<div class="msg">The service is unreachable.</div>';
+  }
+});
 
 $('q').addEventListener('submit', async e => {
   e.preventDefault();

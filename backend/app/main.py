@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
+from . import anywhere as anywhere_mod
 from . import auth, feedback
 from .cache import cache
 from .catalog import CITIES, find_city
@@ -197,6 +198,58 @@ async def locations(
         for c in CITIES.values()
         if needle in c.name.lower()
     ][:8]
+
+
+@app.get("/api/anywhere")
+async def anywhere(
+    origin: str = Query(..., min_length=2),
+    origin_lat: float | None = None,
+    origin_lon: float | None = None,
+    days_ahead: int = Query(21, ge=0, le=365),
+    max_fare: int | None = Query(None, ge=0, description="euros"),
+    max_hours: float | None = Query(None, gt=0, le=48),
+    bahncard: int = Query(0, ge=0, le=50),
+    limit: int = Query(40, ge=1, le=100),
+    tester: str = Depends(auth.current_tester),
+) -> dict:
+    """One origin, everywhere worth going. Estimates only — no upstream calls,
+    which is exactly why it can price hundreds of destinations at once."""
+    place = await _resolve(origin, None, origin_lat, origin_lon)
+    country = "DE"
+    for d in anywhere_mod.DESTINATIONS:
+        if abs(d.lat - place.lat) < 1.2 and abs(d.lon - place.lon) < 1.6:
+            country = d.country
+            break
+
+    results = anywhere_mod.search(
+        origin_lat=place.lat, origin_lon=place.lon, origin_country=country,
+        days_ahead=days_ahead,
+        max_fare_cents=max_fare * 100 if max_fare is not None else None,
+        max_hours=max_hours,
+        bahncard=bahncard if bahncard in (25, 50) else 0,
+        limit=limit,
+    )
+    return {
+        "origin": place.label,
+        "count": len(results),
+        "disclaimer": ("Estimated from distance and published tariffs, not live "
+                       "quotes. Tap a destination for a real routing."),
+        "destinations": [
+            {
+                "name": o.destination.name, "country": o.destination.country,
+                "blurb": o.destination.blurb,
+                "lat": o.destination.lat, "lon": o.destination.lon,
+                "km": round(o.km), "mode": o.mode,
+                "hours": round(o.hours, 1),
+                "fare_label": o.fare_label,
+                "fare_low_cents": o.fare_low_cents,
+                "fare_typical_cents": o.fare_typical_cents,
+                "co2_kg": round(o.co2_kg),
+                "note": o.note,
+            }
+            for o in results
+        ],
+    }
 
 
 @app.get("/api/cities")
