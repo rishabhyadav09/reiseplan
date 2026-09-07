@@ -43,6 +43,7 @@ from ..domain import (
     PlanRequest,
     ProviderResult,
 )
+from ..fares import estimate as estimate_fare
 from ..geo import CO2_G_PER_PKM, haversine_km
 from .base import UpstreamUnavailable, http
 
@@ -189,9 +190,31 @@ def _place_name(place: dict | None, fallback: str) -> str:
     return fallback if name in PLACEHOLDER_NAMES else name
 
 
+def _country_of(itin: dict) -> str:
+    """Crude but adequate: bounding box of the German-speaking core versus
+    neighbours. A country pack would carry this properly."""
+    for raw in itin.get("legs") or []:
+        frm = raw.get("from") or {}
+        lat, lon = frm.get("lat"), frm.get("lon")
+        if lat is None:
+            continue
+        if 47.2 <= lat <= 55.1 and 5.8 <= lon <= 15.1:
+            return "DE"
+        if 46.3 <= lat <= 49.1 and 9.5 <= lon <= 17.2:
+            return "AT"
+        if 45.8 <= lat <= 47.9 and 5.9 <= lon <= 10.5:
+            return "CH"
+        if 42.3 <= lat <= 51.1 and -4.9 <= lon <= 8.3:
+            return "FR"
+        if 48.5 <= lat <= 55.1 and 14.1 <= lon <= 24.2:
+            return "PL"
+    return "DE"
+
+
 def itinerary_from_motis(
     itin: dict, *, deutschlandticket: bool = False,
     origin_label: str = "your origin", destination_label: str = "your destination",
+    days_ahead: int = 30, bahncard: int = 0,
 ) -> Itinerary | None:
     raw_legs = itin.get("legs") or []
     if not raw_legs:
@@ -205,6 +228,7 @@ def itinerary_from_motis(
     legs: list[Leg] = []
     modes_seen: set[str] = set()
     co2 = 0.0
+    transit_km = 0.0
     prev_end: datetime | None = None
 
     for idx, raw in enumerate(raw_legs):
@@ -243,6 +267,7 @@ def itinerary_from_motis(
                   else CO2_G_PER_PKM["coach"] if mode in COACH_MODES | BUS_MODES
                   else CO2_G_PER_PKM["rail_regional"])
         co2 += km * per_km
+        transit_km += km
 
         legs.append(Leg(
             kind=LegKind.RIDE,
@@ -273,8 +298,23 @@ def itinerary_from_motis(
         cost_lines.append(CostLine("Fare from the operator's feed", fare))
         confidence = Confidence.LIVE
     else:
-        cost_lines.append(CostLine("Fare not published in this feed", 0))
-        notes.append("No fare data for this operator — check before booking.")
+        # No published fare. Estimate a band from the national tariff rather
+        # than showing EUR 0.00, which reads as free and is useless for ranking.
+        band = estimate_fare(
+            km=transit_km, country=_country_of(itin), days_ahead=days_ahead,
+            long_distance=mode in (Mode.RAIL, Mode.NIGHT_RAIL),
+            bahncard=bahncard,
+        )
+        if band is None:
+            cost_lines.append(CostLine("Fare not published in this feed", 0))
+            notes.append("No fare data for this operator — check before booking.")
+        else:
+            cost_lines.append(
+                CostLine(f"Estimated fare ({band.label()})", band.typical_cents))
+            notes.append(
+                f"Estimated from the {band.basis}, not a live quote. "
+                f"Expect {band.label()}."
+            )
 
     if mode is Mode.NIGHT_RAIL:
         cost_lines.append(CostLine("Hotel night saved", -9500))
@@ -340,7 +380,8 @@ class MotisProvider:
             for raw in itins:
                 it = itinerary_from_motis(
                     raw, origin_label=req.origin.label,
-                    destination_label=req.destination.label)
+                    destination_label=req.destination.label,
+                    days_ahead=req.days_ahead, bahncard=req.has_bahncard)
                 if it:
                     out.append(it)
 
@@ -353,7 +394,8 @@ class MotisProvider:
                     it = itinerary_from_motis(
                         raw, deutschlandticket=True,
                         origin_label=req.origin.label,
-                        destination_label=req.destination.label)
+                        destination_label=req.destination.label,
+                        days_ahead=req.days_ahead, bahncard=req.has_bahncard)
                     if it:
                         out.append(it)
         except UpstreamUnavailable as exc:
