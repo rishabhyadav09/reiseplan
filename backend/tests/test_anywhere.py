@@ -1,8 +1,11 @@
 """Anywhere search. Pure, so every assertion is about the model itself."""
 
+from datetime import datetime, timedelta, timezone
+
 from app.anywhere import MIN_DISTANCE_KM, search
 from app.destinations import DESTINATIONS
 
+BERLIN = timezone(timedelta(hours=2))
 DORTMUND = {"origin_lat": 51.5136, "origin_lon": 7.4653, "origin_country": "DE"}
 
 
@@ -84,9 +87,8 @@ def test_it_is_fast_enough_to_run_on_every_keystroke():
 
 
 def test_arrival_times_are_returned_when_a_departure_is_given():
-    from datetime import datetime
     rows = search(**DORTMUND, days_ahead=21, limit=5,
-                  depart_at=datetime(2026, 10, 3, 8, 0))
+                  depart_at=datetime(2026, 10, 3, 8, 0, tzinfo=BERLIN))
     for o in rows:
         assert o.arrive_at is not None
         assert o.arrive_at > o.depart_at
@@ -94,9 +96,8 @@ def test_arrival_times_are_returned_when_a_departure_is_given():
 
 
 def test_an_overnight_arrival_is_flagged_as_the_next_day():
-    from datetime import datetime
     rows = search(**DORTMUND, days_ahead=21, limit=100,
-                  depart_at=datetime(2026, 10, 3, 21, 0))
+                  depart_at=datetime(2026, 10, 3, 21, 0, tzinfo=BERLIN))
     late = [o for o in rows if o.arrive_at.date() > o.depart_at.date()]
     assert late, "a 21:00 departure must produce some next-day arrivals"
     assert "next day" in late[0].arrival_note()
