@@ -115,6 +115,7 @@ class PlanRequest:
     checked_bag: bool = False
     has_deutschlandticket: bool = False
     has_bahncard: int = 0            # 0, 25, 50
+    arrive_by: bool = False
     passengers: int = 1
 
     @property

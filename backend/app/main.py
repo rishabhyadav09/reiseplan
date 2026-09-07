@@ -18,6 +18,7 @@ from .domain import Confidence, Place, PlanRequest
 from .planner import plan, weights_from
 from .providers.base import close_http
 from .providers.db_rail import resolve_station, search_locations
+from .providers.motis import geocode
 from .scoring import PRESETS
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
@@ -97,7 +98,7 @@ async def _resolve(text: str, station_id: str | None = None,
         return Place(city.name, city.lat, city.lon,
                      station_id=await resolve_station(city.station_query))
 
-    hits = await search_locations(text, limit=1)
+    hits = await geocode(text, limit=1) or await search_locations(text, limit=1)
     if hits:
         h = hits[0]
         return Place(h["name"], h["lat"], h["lon"], station_id=h.get("id"))
@@ -185,7 +186,9 @@ async def locations(
 ) -> list[dict]:
     """Typeahead. Falls back to the built-in catalogue if DB is unreachable,
     so the box still works during an outage."""
-    hits = await search_locations(q)
+    hits = await geocode(q)          # global coverage
+    if not hits:
+        hits = await search_locations(q)   # DB fallback, if it is answering
     if hits:
         return hits
     needle = q.strip().lower()
@@ -226,7 +229,7 @@ async def plan_route(
     if preset not in PRESETS:
         raise HTTPException(400, f"preset must be one of {sorted(PRESETS)}")
 
-    depart_after = depart or (datetime.now(BERLIN) + timedelta(hours=2))
+    depart_after = arrive_before or depart or (datetime.now(BERLIN) + timedelta(hours=2))
     if depart_after.tzinfo is None:
         depart_after = depart_after.replace(tzinfo=BERLIN)
 
@@ -238,6 +241,7 @@ async def plan_route(
         checked_bag=checked_bag,
         has_deutschlandticket=deutschlandticket,
         has_bahncard=bahncard if bahncard in (25, 50) else 0,
+        arrive_by=arrive_before is not None,
     )
 
     scored, degraded = await plan(req, weights_from(preset, vot_cents))

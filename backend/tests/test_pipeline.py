@@ -55,6 +55,12 @@ def enable_air(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _route(request):
+    from tests.conftest import CURRENT
+    CURRENT["pair"] = frozenset({"Dortmund", "München"})
+
+
+@pytest.fixture(autouse=True)
 def stub_db(monkeypatch):
     cache_mod.cache._local.clear()
 
@@ -123,7 +129,13 @@ def test_deutschlandticket_surfaces_a_zero_fare_option():
     assert any(o["total_cents"] == 0 for o in body["options"])
 
 
-def test_unknown_city_is_a_clean_404():
+def test_unknown_place_is_a_clean_404(monkeypatch):
+    """With the geocoder returning nothing, an unresolvable name must 404
+    rather than silently plan from the wrong coordinates."""
+    async def nothing(path, params):
+        return [] if path == "/api/v1/geocode" else {"itineraries": []}
+
+    monkeypatch.setattr("app.providers.motis._get", nothing)
     with TestClient(app) as client:
         assert client.get("/api/plan", params={
             "origin": "Atlantis", "destination": "Berlin"}).status_code == 404

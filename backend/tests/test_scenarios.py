@@ -103,7 +103,8 @@ def client():
 
 
 def search(client, origin, destination, **kw):
-    _ACTIVE["times"] = RAIL_TIMES[(origin, destination)]
+    from tests.conftest import CURRENT
+    CURRENT["pair"] = frozenset({origin, destination})
     params = {"origin": origin, "destination": destination,
               "depart": DEPART.isoformat(), **kw}
     resp = client.get("/api/plan", params=params)
@@ -185,12 +186,26 @@ def test_checking_a_bag_makes_flying_slower_and_dearer(client, with_flights):
     assert with_bag["total_cents"] > without["total_cents"]
 
 
-def test_deutschlandticket_surfaces_a_free_option_on_a_medium_route(client):
+def test_deutschlandticket_option_is_labelled_covered_not_merely_zero(client):
+    """Since MOTIS rarely carries fares, most options price at zero. A
+    Deutschlandticket option therefore has to be identified by its stated
+    reason, not by its total, or the assertion means nothing."""
     body = search(client, "Frankfurt am Main", "Stuttgart",
                   deutschlandticket="true", preset="cheapest")
-    free = [o for o in body["options"] if o["total_cents"] == 0]
-    assert free, "no zero-fare option for a Deutschlandticket holder"
-    assert free[0]["door_to_door_minutes"] > mode(body, "rail")["door_to_door_minutes"]
+    covered = [o for o in body["options"]
+               if any("Deutschlandticket" in c["label"] for c in o["cost_lines"])]
+    assert covered, "no option identified as covered by the pass"
+    assert covered[0]["mode"] == "rail_regional"
+
+
+def test_missing_fares_are_declared_rather_than_guessed(client):
+    """The honest failure mode: say the feed has no fare, do not invent one."""
+    body = search(client, "Köln", "Berlin")
+    unpriced = [o for o in body["options"] if o["total_cents"] == 0
+                and o["mode"].startswith("rail")]
+    for o in unpriced:
+        assert o["confidence"] != "live"
+        assert any("fare" in n.lower() for n in o["notes"])
 
 
 def test_deutschlandticket_wins_on_cheapest_but_not_on_fastest(client):

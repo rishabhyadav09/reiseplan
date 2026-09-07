@@ -8,12 +8,17 @@ from .domain import Itinerary, Mode, PlanRequest
 from .providers.air import AirProvider
 from .providers.coach import build_coach_provider
 from .providers.db_rail import DBRailProvider
+from .providers.motis import MotisProvider
 from .scoring import PRESETS, Scored, Weights, rank
 
 log = logging.getLogger(__name__)
 
 def _providers():
-    active = [DBRailProvider(), build_coach_provider()]
+    # MOTIS covers rail, coach, tram and bus in one query, so the modelled
+    # coach provider is only a fallback for routes its feeds do not reach.
+    active = [MotisProvider(), build_coach_provider()]
+    if settings.use_db_rail:
+        active.append(DBRailProvider())
     if settings.enable_air:
         active.append(AirProvider())
     return active

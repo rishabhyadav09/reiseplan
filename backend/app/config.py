@@ -9,7 +9,13 @@ class Settings:
     # Point this at your OWN db-vendo-client container in anything but a demo.
     # The shared instance at v6.db.transport.rest is rate limited to 100 req/min
     # across every user on the internet, and DB blocks aggressively.
+    # Transitous: community-run MOTIS, ~40 countries of GTFS. Read their usage
+    # policy before pointing real traffic at it, and cache aggressively.
+    motis_base: str = os.getenv("MOTIS_BASE", "https://api.transitous.org")
+
+    # Kept so the DB adapter can be switched back on if DB stops blocking.
     db_api_base: str = os.getenv("DB_API_BASE", "https://v6.db.transport.rest")
+    use_db_rail: bool = os.getenv("USE_DB_RAIL", "false").lower() == "true"
     user_agent: str = os.getenv("USER_AGENT", "reiseplan-poc (set a real contact)")
 
     redis_url: str | None = os.getenv("REDIS_URL")

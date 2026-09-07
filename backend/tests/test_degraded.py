@@ -20,11 +20,13 @@ DEPART = (datetime.now(BERLIN) + timedelta(days=21)).replace(
 
 @pytest.fixture
 def rail_down(monkeypatch):
+    """Transitous unreachable. Overrides the autouse stub in conftest."""
     cache_mod.cache._local.clear()
 
     async def boom(path, params):
-        raise UpstreamUnavailable("Deutsche Bahn unreachable after 3 attempts (HTTP 503)")
+        raise UpstreamUnavailable("Transitous unreachable after 3 attempts (HTTP 503)")
 
+    monkeypatch.setattr("app.providers.motis._get", boom)
     monkeypatch.setattr("app.providers.db_rail.db_get", boom)
     with TestClient(app) as c:
         yield c
@@ -47,24 +49,9 @@ def test_a_lone_coach_is_flagged_as_not_a_fair_comparison(rail_down):
     assert "NOT a fair comparison" in body["warnings"][0]
 
 
-def test_healthy_rail_is_not_flagged_degraded(monkeypatch):
-    cache_mod.cache._local.clear()
-
-    async def ok(path, params):
-        if path == "/locations":
-            return [{"id": "8000080", "name": params.get("query")}]
-        dep = datetime.fromisoformat(params["departure"])
-        return {"journeys": [{"legs": [{
-            "origin": {"type": "stop", "name": "Dortmund Hbf",
-                       "location": {"latitude": 51.51, "longitude": 7.46}},
-            "destination": {"type": "stop", "name": "Frankfurt(Main)Hbf",
-                            "location": {"latitude": 50.11, "longitude": 8.68}},
-            "departure": dep.isoformat(),
-            "arrival": (dep + timedelta(minutes=135)).isoformat(),
-            "line": {"name": "ICE 613", "product": "nationalExpress", "mode": "train"},
-        }], "price": {"amount": 59.9, "currency": "EUR"}}]}
-
-    monkeypatch.setattr("app.providers.db_rail.db_get", ok)
+def test_healthy_rail_is_not_flagged_degraded(set_route):
+    """The conftest stub supplies a 2h15 ICE for this pair."""
+    set_route("Dortmund", "Frankfurt am Main")
     with TestClient(app) as c:
         body = c.get("/api/plan", params={
             "origin": "Dortmund", "destination": "Frankfurt am Main",
@@ -76,30 +63,25 @@ def test_healthy_rail_is_not_flagged_degraded(monkeypatch):
     assert body["options"][0]["mode"] == "rail"
 
 
-def test_location_search_falls_back_to_catalogue_when_db_is_down(monkeypatch):
+def test_location_search_falls_back_to_catalogue_when_upstream_is_down(monkeypatch):
     """The typeahead must keep working during an outage, not go blank."""
     cache_mod.cache._local.clear()
 
     async def boom(path, params):
         raise UpstreamUnavailable("HTTP 503")
 
+    monkeypatch.setattr("app.providers.motis._get", boom)
     monkeypatch.setattr("app.providers.db_rail.db_get", boom)
     with TestClient(app) as c:
         hits = c.get("/api/locations", params={"q": "Dort"}).json()
     assert any(h["name"] == "Dortmund" for h in hits)
 
 
-def test_location_search_prefers_live_db_results(monkeypatch):
-    cache_mod.cache._local.clear()
-
-    async def ok(path, params):
-        return [{"id": "8000080", "name": "Dortmund Hbf", "type": "stop",
-                 "location": {"latitude": 51.5177, "longitude": 7.4592}}]
-
-    monkeypatch.setattr("app.providers.db_rail.db_get", ok)
+def test_location_search_prefers_live_geocoder_results():
+    """conftest's stub geocoder answers; the catalogue is never consulted."""
     with TestClient(app) as c:
         hits = c.get("/api/locations", params={"q": "Dortmund Hbf"}).json()
-    assert hits[0]["id"] == "8000080"
+    assert hits[0]["name"] == "Dortmund Hbf"
     assert hits[0]["kind"] == "stop"
 
 
