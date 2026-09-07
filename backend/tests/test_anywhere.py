@@ -81,3 +81,28 @@ def test_it_is_fast_enough_to_run_on_every_keystroke():
     for _ in range(20):
         search(**DORTMUND, days_ahead=21, limit=40)
     assert (time.perf_counter() - t0) / 20 < 0.02, "cheap pass must stay cheap"
+
+
+def test_arrival_times_are_returned_when_a_departure_is_given():
+    from datetime import datetime
+    rows = search(**DORTMUND, days_ahead=21, limit=5,
+                  depart_at=datetime(2026, 10, 3, 8, 0))
+    for o in rows:
+        assert o.arrive_at is not None
+        assert o.arrive_at > o.depart_at
+        assert "arrives about" in o.arrival_note()
+
+
+def test_an_overnight_arrival_is_flagged_as_the_next_day():
+    from datetime import datetime
+    rows = search(**DORTMUND, days_ahead=21, limit=100,
+                  depart_at=datetime(2026, 10, 3, 21, 0))
+    late = [o for o in rows if o.arrive_at.date() > o.depart_at.date()]
+    assert late, "a 21:00 departure must produce some next-day arrivals"
+    assert "next day" in late[0].arrival_note()
+
+
+def test_no_arrival_time_is_invented_without_a_departure():
+    for o in search(**DORTMUND, days_ahead=21, limit=5):
+        assert o.arrive_at is None
+        assert o.arrival_note() is None

@@ -15,7 +15,8 @@ Pure module. No I/O, no clock.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime, timedelta
 
 from .destinations import DESTINATIONS, Destination
 from .fares import estimate
@@ -63,6 +64,19 @@ class Option:
     co2_kg: float
     reachable: bool
     note: str | None = None
+    depart_at: datetime | None = None
+    arrive_at: datetime | None = None
+
+    def arrival_note(self) -> str | None:
+        """A duration tells you how long. A clock time tells you whether you
+        still get an afternoon there, which is the actual question."""
+        if not self.arrive_at:
+            return None
+        same_day = self.depart_at and self.arrive_at.date() == self.depart_at.date()
+        stamp = self.arrive_at.strftime("%H:%M")
+        if same_day:
+            return f"arrives about {stamp}"
+        return f"arrives about {stamp} the next day"
 
     @property
     def fare_label(self) -> str:
@@ -114,6 +128,7 @@ def search(
     max_hours: float | None = None,
     bahncard: int = 0,
     limit: int = 40,
+    depart_at: datetime | None = None,
 ) -> list[Option]:
     """Rank destinations by fare, cheapest first. Pure and fast."""
     out: list[Option] = []
@@ -159,6 +174,9 @@ def search(
             continue
         if max_hours is not None and best.hours > max_hours:
             continue
+        if depart_at is not None:
+            best = replace(best, depart_at=depart_at,
+                           arrive_at=depart_at + timedelta(hours=best.hours))
         out.append(best)
 
     out.sort(key=lambda o: (o.fare_typical_cents, o.hours))

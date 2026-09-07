@@ -61,6 +61,7 @@
   .figs{display:flex;gap:1.2rem;align-items:baseline}
   .price{font-size:1.35rem;font-weight:600}
   .dur{font-size:1rem;color:var(--ink-soft)}
+  .times{display:block;font-size:.9rem;font-weight:500;color:var(--ink)}
   .tag{font-size:.72rem;padding:.1rem .45rem;border:1px solid var(--rule);color:var(--ink-soft);vertical-align:.15em}
   .tag.live{border-color:var(--rail);color:var(--rail)}
 
@@ -152,6 +153,7 @@
       <div><label for="aw-budget">Budget, one way (€)</label><input id="aw-budget" data-testid="aw-budget" type="number" min="10" max="900" value="80"></div>
       <div><label for="aw-hours">At most (hours)</label><input id="aw-hours" data-testid="aw-hours" type="number" min="1" max="24" step="0.5" value="6"></div>
       <div><label for="aw-days">Booking this far ahead (days)</label><input id="aw-days" data-testid="aw-days" type="number" min="0" max="365" value="21"></div>
+      <div><label for="aw-depart">Leaving at</label><input id="aw-depart" data-testid="aw-depart" type="time" value="08:00"></div>
     </div>
     <button class="go" type="submit" data-testid="aw-go">Show me somewhere to go</button>
   </form>
@@ -191,6 +193,8 @@ let LAST = null;
 const $ = id => document.getElementById(id);
 const euro = c => '€' + (c/100).toFixed(2);
 const hm = m => `${Math.floor(m/60)}h ${String(Math.round(m%60)).padStart(2,'0')}m`;
+const clock = iso => new Date(iso).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+const nextDay = (a, b) => new Date(a).getDate() !== new Date(b).getDate();
 
 const MODE_NAME = {
   rail:'Train', rail_regional:'Regional trains', night_rail:'Night train',
@@ -318,6 +322,11 @@ $('aw').addEventListener('submit', async e => {
     days_ahead: $('aw-days').value,
     limit: 40,
   });
+  // Arrival time is what tells you whether you still get an afternoon there.
+  const d0 = new Date(Date.now() + Number($('aw-days').value) * 864e5);
+  const [hh, mm] = ($('aw-depart').value || '08:00').split(':');
+  d0.setHours(Number(hh), Number(mm), 0, 0);
+  p.set('depart_at', new Date(d0 - d0.getTimezoneOffset() * 6e4).toISOString().slice(0, 19));
   const pick = PICKED['aw-origin'];
   if (pick) { p.set('origin_lat', pick.lat); p.set('origin_lon', pick.lon); }
   try {
@@ -332,7 +341,7 @@ $('aw').addEventListener('submit', async e => {
       + body.destinations.map(d => `<article class="dest" data-mode="${d.mode}" data-testid="dest">
           <p class="who"><b>${d.name}</b><small>${d.blurb} · ${d.km} km by ${d.mode}${d.note ? ' · ' + d.note : ''}</small></p>
           <span class="f">${d.fare_label}</span>
-          <span class="t">${d.hours}h</span>
+          <span class="t">${d.hours}h${d.arrival_note ? '<br>' + d.arrival_note.replace('arrives about ', '→ ') : ''}</span>
         </article>`).join('');
     $('out').querySelectorAll('.dest').forEach((el, i) => {
       el.style.cursor = 'pointer';
@@ -421,6 +430,7 @@ function render(body) {
         <div class="figs">
           <span class="price" data-testid="price">${euro(o.total_cents)}</span>
           <span class="dur" data-testid="duration">${hm(o.door_to_door_minutes)} door to door</span>
+          <span class="times" data-testid="times">${clock(o.depart)} → ${clock(o.arrive)}${nextDay(o.depart, o.arrive) ? ' +1' : ''}</span>
         </div>
       </div>
       <div class="bar">${segs}</div>

@@ -210,6 +210,7 @@ async def anywhere(
     max_hours: float | None = Query(None, gt=0, le=48),
     bahncard: int = Query(0, ge=0, le=50),
     limit: int = Query(40, ge=1, le=100),
+    depart_at: datetime | None = None,
     tester: str = Depends(auth.current_tester),
 ) -> dict:
     """One origin, everywhere worth going. Estimates only — no upstream calls,
@@ -228,6 +229,8 @@ async def anywhere(
         max_hours=max_hours,
         bahncard=bahncard if bahncard in (25, 50) else 0,
         limit=limit,
+        depart_at=(depart_at.replace(tzinfo=BERLIN) if depart_at
+                   and depart_at.tzinfo is None else depart_at),
     )
     return {
         "origin": place.label,
@@ -246,6 +249,9 @@ async def anywhere(
                 "fare_typical_cents": o.fare_typical_cents,
                 "co2_kg": round(o.co2_kg),
                 "note": o.note,
+                "depart_at": o.depart_at,
+                "arrive_at": o.arrive_at,
+                "arrival_note": o.arrival_note(),
             }
             for o in results
         ],
