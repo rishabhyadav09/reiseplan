@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reiseplan — UAT feedback</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--paper:#E9EBE6;--card:#FDFDFC;--ink:#1B1E1C;--ink-soft:#5B615A;--rule:#C9CCC5;
+        --right:#1F5C43;--wrong:#8E2A1C;--unsure:#B4681B}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:Archivo,system-ui,sans-serif;
+       font-size:16px;line-height:1.55;font-variant-numeric:tabular-nums}
+  .wrap{max-width:60rem;margin:0 auto;padding:2rem 1.25rem 4rem}
+  h1{font-size:1.4rem;font-weight:600;margin:0 0 .3rem}
+  .sub{color:var(--ink-soft);margin:0 0 1.5rem}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));gap:.7rem;margin-bottom:1.5rem}
+  .stat{background:var(--card);border:1px solid var(--rule);padding:.9rem 1rem}
+  .stat b{display:block;font-size:1.9rem;font-weight:600;line-height:1.2}
+  .stat span{font-size:.82rem;color:var(--ink-soft)}
+  .stat.right b{color:var(--right)} .stat.wrong b{color:var(--wrong)} .stat.unsure b{color:var(--unsure)}
+  h2{font-size:1rem;font-weight:600;margin:1.6rem 0 .6rem}
+  table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--rule);font-size:.9rem}
+  th,td{text-align:left;padding:.5rem .7rem;border-bottom:1px solid #EFF1ED;vertical-align:top}
+  th{font-weight:500;color:var(--ink-soft);font-size:.8rem}
+  .v{font-weight:500}
+  .v.right{color:var(--right)} .v.wrong{color:var(--wrong)} .v.unsure{color:var(--unsure)}
+  .quiet{color:var(--ink-soft)}
+  .msg{padding:1rem;background:var(--card);border:1px solid var(--rule);color:var(--ink-soft)}
+  a.btn{display:inline-block;margin-top:1rem;padding:.5rem 1rem;background:var(--ink);color:#fff;
+        text-decoration:none;font-size:.9rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>UAT feedback</h1>
+  <p class="sub">Round one. Every verdict carries the query and the ranking the tester was looking at.</p>
+  <div id="out"><div class="msg">Loading…</div></div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+
+fetch('/api/feedback/summary', { credentials: 'include' })
+  .then(r => {
+    if (r.status === 401) throw new Error('gate');
+    return r.json();
+  })
+  .then(render)
+  .catch(err => {
+    $('out').innerHTML = err.message === 'gate'
+      ? '<div class="msg">Sign in on the main page first, then reload this.</div>'
+      : '<div class="msg">Could not load feedback.</div>';
+  });
+
+function render(d) {
+  const c = d.counts || {};
+  const total = (c.right || 0) + (c.wrong || 0) + (c.unsure || 0);
+
+  if (!total) {
+    $('out').innerHTML = '<div class="msg">No feedback yet. Once testers start '
+      + 'submitting verdicts they show up here.</div>';
+    return;
+  }
+
+  const testers = (d.testers || []).map(t =>
+    `<tr><td>${esc(t.tester)}</td><td>${t.n}</td>
+     <td class="quiet">${esc((t.last || '').slice(0, 16).replace('T', ' '))}</td></tr>`).join('');
+
+  const recent = (d.recent || []).map(r =>
+    `<tr>
+      <td class="v ${esc(r.verdict)}">${esc(r.verdict)}</td>
+      <td>${esc(r.o)} → ${esc(r.d)}<br><span class="quiet">${esc(r.p)}</span></td>
+      <td>${esc(r.comment) || '<span class="quiet">—</span>'}</td>
+      <td class="quiet">${esc(r.tester)}<br>${esc((r.created_at || '').slice(5, 16).replace('T', ' '))}</td>
+    </tr>`).join('');
+
+  $('out').innerHTML = `
+    <div class="cards">
+      <div class="stat"><b>${total}</b><span>total verdicts</span></div>
+      <div class="stat right"><b>${c.right || 0}</b><span>ranking looked right</span></div>
+      <div class="stat wrong"><b>${c.wrong || 0}</b><span>would book otherwise</span></div>
+      <div class="stat unsure"><b>${c.unsure || 0}</b><span>not sure</span></div>
+    </div>
+    <h2>Who is testing</h2>
+    <table><tr><th>Tester</th><th>Verdicts</th><th>Last seen</th></tr>${testers}</table>
+    <h2>Recent verdicts</h2>
+    <table><tr><th>Verdict</th><th>Route</th><th>Comment</th><th>Who</th></tr>${recent}</table>
+    <a class="btn" href="/api/feedback/export.csv">Download the full round as CSV</a>`;
+}
+</script>
+</body>
+</html>

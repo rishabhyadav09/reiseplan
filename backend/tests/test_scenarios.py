@@ -83,6 +83,20 @@ def stub_db(monkeypatch):
 
 
 @pytest.fixture
+def with_flights(monkeypatch):
+    """Flights are off by default now. Tests that assert on them must opt in,
+    which is the point: the default has to be the safe one.
+
+    Settings is a frozen dataclass, so the provider list is swapped directly
+    rather than mutating config.
+    """
+    from app import planner
+    from app.providers.air import AirProvider
+
+    monkeypatch.setattr(planner, "PROVIDERS", [*planner.PROVIDERS, AirProvider()])
+
+
+@pytest.fixture
 def client():
     with TestClient(app) as c:
         yield c
@@ -103,7 +117,7 @@ def mode(body, name):
 
 # ---------------------------------------------------------------- long haul
 
-def test_dortmund_munich_flight_barely_beats_the_train_and_costs_far_more(client):
+def test_dortmund_munich_flight_barely_beats_the_train_and_costs_far_more(client, with_flights):
     """The headline case. If this ever inverts, check the airport access leg."""
     body = search(client, "Dortmund", "München", preset="balanced")
     rail, air = mode(body, "rail"), mode(body, "air")
@@ -113,7 +127,7 @@ def test_dortmund_munich_flight_barely_beats_the_train_and_costs_far_more(client
     assert body["options"][0]["mode"] == "rail"
 
 
-def test_munich_hamburg_is_where_flying_starts_to_make_sense(client):
+def test_munich_hamburg_is_where_flying_starts_to_make_sense(client, with_flights):
     """Germany's longest domestic pair. Air should at least be competitive."""
     body = search(client, "München", "Hamburg", preset="fastest")
     air = mode(body, "air")
@@ -163,7 +177,7 @@ def test_raising_value_of_time_never_promotes_the_slowest_option(client):
 
 # ------------------------------------------------------------ traveller flags
 
-def test_checking_a_bag_makes_flying_slower_and_dearer(client):
+def test_checking_a_bag_makes_flying_slower_and_dearer(client, with_flights):
     without = mode(search(client, "München", "Hamburg", preset="fastest"), "air")
     with_bag = mode(search(client, "München", "Hamburg", preset="fastest",
                            checked_bag="true"), "air")
@@ -207,6 +221,6 @@ def test_every_option_declares_whether_its_fare_is_real(client, pair):
             assert opt["confidence"] == "modelled"
 
 
-def test_flying_always_emits_more_than_taking_the_train(client):
+def test_flying_always_emits_more_than_taking_the_train(client, with_flights):
     body = search(client, "München", "Hamburg")
     assert mode(body, "air")["co2_g"] > mode(body, "rail")["co2_g"] * 3

@@ -20,6 +20,11 @@ class Settings:
     db_max_concurrency: int = int(os.getenv("DB_MAX_CONCURRENCY", "4"))
 
     enable_flix: bool = os.getenv("ENABLE_FLIX", "false").lower() == "true"
+
+    # Modelled airfares are shown to nobody by default. A stranger reading
+    # "EUR 135.71" does not care that a badge says "modelled"; they read it as
+    # a price. Turn this on only once a real fare feed is wired.
+    enable_air: bool = os.getenv("ENABLE_AIR", "false").lower() == "true"
     duffel_token: str | None = os.getenv("DUFFEL_TOKEN")
 
     deutschlandticket_monthly_cents: int = int(os.getenv("DTICKET_CENTS", "5800"))

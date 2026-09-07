@@ -1,11 +1,11 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from app.domain import Confidence, CostLine, Itinerary, Leg, LegKind, Mode
 from app.scoring import PRESETS, Weights, generalized_cost_cents, rank
 
-T0 = datetime(2026, 10, 14, 8, 0, tzinfo=timezone.utc)
+T0 = datetime(2026, 10, 14, 8, 0, tzinfo=UTC)
 
 
 def make(mode, minutes, cents, *, productive=0.0, co2_g=0, legs=None):

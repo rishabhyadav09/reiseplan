@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from .config import settings
 from .domain import Itinerary, Mode, PlanRequest
 from .providers.air import AirProvider
 from .providers.coach import build_coach_provider
@@ -11,7 +12,14 @@ from .scoring import PRESETS, Scored, Weights, rank
 
 log = logging.getLogger(__name__)
 
-PROVIDERS = [DBRailProvider(), AirProvider(), build_coach_provider()]
+def _providers():
+    active = [DBRailProvider(), build_coach_provider()]
+    if settings.enable_air:
+        active.append(AirProvider())
+    return active
+
+
+PROVIDERS = _providers()
 
 # How many of each mode to surface. Four near-identical ICEs is noise.
 PER_MODE_LIMIT = {

@@ -48,6 +48,13 @@ def _stub_journey(dep: datetime):
 
 
 @pytest.fixture(autouse=True)
+def enable_air(monkeypatch):
+    from app import planner
+    from app.providers.air import AirProvider
+    monkeypatch.setattr(planner, "PROVIDERS", [*planner.PROVIDERS, AirProvider()])
+
+
+@pytest.fixture(autouse=True)
 def stub_db(monkeypatch):
     cache_mod.cache._local.clear()
 

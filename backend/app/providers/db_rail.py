@@ -67,6 +67,43 @@ async def resolve_station(query: str) -> str | None:
     return await cache.get_or_set(ck, settings.cache_ttl_locations, fetch)
 
 
+async def search_locations(query: str, limit: int = 8) -> list[dict]:
+    """Typeahead over DB's own index: stations, addresses, airports, POIs.
+
+    This is what replaces the hardcoded city list. DB indexes every stop in
+    Germany plus a good deal of neighbouring Europe, so the catalogue stops
+    being a file we maintain and starts being upstream's problem.
+    """
+    ck = key_for("locsearch", {"q": query.lower().strip(), "n": limit})
+
+    async def fetch():
+        try:
+            data = await db_get("/locations", {
+                "query": query, "results": limit,
+                "stops": "true", "addresses": "true", "poi": "true",
+            })
+        except UpstreamUnavailable:
+            return None
+        if not isinstance(data, list):
+            return []
+        out = []
+        for item in data:
+            loc = item.get("location") or item
+            lat, lon = loc.get("latitude"), loc.get("longitude")
+            if lat is None or lon is None:
+                continue
+            out.append({
+                "id": item.get("id"),
+                "name": item.get("name") or item.get("address") or query,
+                "kind": item.get("type") or "stop",
+                "lat": lat,
+                "lon": lon,
+            })
+        return out
+
+    return await cache.get_or_set(ck, settings.cache_ttl_locations, fetch) or []
+
+
 async def fetch_journeys(
     origin: Place,
     destination: Place,
@@ -75,6 +112,9 @@ async def fetch_journeys(
     results: int = 4,
     regional_only: bool = False,
     bahncard: int = 0,
+    arrive_before: datetime | None = None,
+    via: str | None = None,
+    polyline: bool = False,
 ) -> list[dict]:
     params: dict = {
         **_endpoint_params("from", origin),
@@ -86,6 +126,14 @@ async def fetch_journeys(
         "tickets": "true",
         "language": "en",
     }
+    if arrive_before is not None:
+        # DB takes either departure or arrival, never both.
+        params.pop("departure", None)
+        params["arrival"] = arrive_before.isoformat()
+    if via:
+        params["via"] = via
+    if polyline:
+        params["polylines"] = "true"
     if regional_only:
         # Deutschlandticket routing: everything except long distance.
         params |= {"nationalExpress": "false", "national": "false"}
@@ -259,7 +307,7 @@ class DBRailProvider:
         except UpstreamUnavailable as exc:
             log.warning("db unavailable: %s", exc)
             return ProviderResult((), degraded=True, reason=str(exc))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.exception("db provider failed")
             return ProviderResult((), degraded=True, reason=f"Rail lookup failed: {exc}")
         return ProviderResult(tuple(out))

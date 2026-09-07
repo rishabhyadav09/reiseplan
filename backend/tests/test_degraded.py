@@ -74,3 +74,40 @@ def test_healthy_rail_is_not_flagged_degraded(monkeypatch):
     # 2h15 ICE must beat the 4h20 modelled coach it was losing to.
     assert rail["door_to_door_minutes"] < 200
     assert body["options"][0]["mode"] == "rail"
+
+
+def test_location_search_falls_back_to_catalogue_when_db_is_down(monkeypatch):
+    """The typeahead must keep working during an outage, not go blank."""
+    cache_mod.cache._local.clear()
+
+    async def boom(path, params):
+        raise UpstreamUnavailable("HTTP 503")
+
+    monkeypatch.setattr("app.providers.db_rail.db_get", boom)
+    with TestClient(app) as c:
+        hits = c.get("/api/locations", params={"q": "Dort"}).json()
+    assert any(h["name"] == "Dortmund" for h in hits)
+
+
+def test_location_search_prefers_live_db_results(monkeypatch):
+    cache_mod.cache._local.clear()
+
+    async def ok(path, params):
+        return [{"id": "8000080", "name": "Dortmund Hbf", "type": "stop",
+                 "location": {"latitude": 51.5177, "longitude": 7.4592}}]
+
+    monkeypatch.setattr("app.providers.db_rail.db_get", ok)
+    with TestClient(app) as c:
+        hits = c.get("/api/locations", params={"q": "Dortmund Hbf"}).json()
+    assert hits[0]["id"] == "8000080"
+    assert hits[0]["kind"] == "stop"
+
+
+def test_modelled_flights_are_hidden_by_default(monkeypatch):
+    """A stranger reads EUR 135.71 as a price, badge or no badge."""
+    from app.config import settings
+    assert settings.enable_air is False
+
+
+def test_admin_page_is_served(rail_down):
+    assert rail_down.get("/admin").status_code == 200

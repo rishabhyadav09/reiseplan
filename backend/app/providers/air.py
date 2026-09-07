@@ -179,7 +179,7 @@ class AirProvider:
                         notes=tuple(notes),
                     )
                 )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.exception("air provider failed")
             return ProviderResult(tuple(out), degraded=True,
                                   reason=f"Flight lookup failed: {exc}")

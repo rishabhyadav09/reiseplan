@@ -98,7 +98,19 @@
     border:1px solid var(--ink);cursor:pointer}
   .fb .send[disabled]{opacity:.45;cursor:not-allowed}
   [hidden]{display:none !important}
+
+  .ac{position:relative}
+  .ac ul{position:absolute;z-index:10;left:0;right:0;top:100%;margin:0;padding:0;list-style:none;
+    background:#fff;border:1px solid var(--rule);border-top:0;max-height:14rem;overflow-y:auto}
+  .ac li{padding:.45rem .6rem;font-size:.9rem;cursor:pointer;border-bottom:1px solid #F2F3F0}
+  .ac li:last-child{border-bottom:0}
+  .ac li:hover,.ac li[aria-selected="true"]{background:#EFF1ED}
+  .ac li small{display:block;color:var(--ink-soft);font-size:.76rem}
+  #map{height:220px;margin-top:.7rem;border:1px solid var(--rule);background:#EFF1ED}
+  .leaflet-container{font:inherit}
 </style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 </head>
 <body>
 <div class="gate" id="gate" hidden>
@@ -120,9 +132,9 @@
 
   <form id="q">
     <div class="grid">
-      <div><label for="origin">Leaving from</label><input id="origin" data-testid="origin" list="cities" value="Dortmund" autocomplete="off"></div>
-      <div><label for="destination">Going to</label><input id="destination" data-testid="destination" list="cities" value="München" autocomplete="off"></div>
-      <div><label for="depart">Departing after</label><input id="depart" data-testid="depart" type="datetime-local"></div>
+      <div class="ac"><label for="origin">Leaving from</label><input id="origin" data-testid="origin" value="Dortmund" autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list"></div>
+      <div class="ac"><label for="destination">Going to</label><input id="destination" data-testid="destination" value="Frankfurt am Main" autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list"></div>
+      <div><label for="depart"><select id="timemode" data-testid="timemode" style="width:auto;padding:.1rem .2rem;font-size:.8rem;border:0;background:transparent;color:var(--ink-soft)"><option value="depart">Departing after</option><option value="arrive">Arriving before</option></select></label><input id="depart" data-testid="depart" type="datetime-local"></div>
       <div><label for="preset">Optimise for</label>
         <select id="preset" data-testid="preset">
           <option value="balanced">A sensible balance</option>
@@ -141,8 +153,8 @@
     <button class="go" type="submit" data-testid="compare">Compare routes</button>
   </form>
 
-  <datalist id="cities"></datalist>
   <div id="out" data-testid="results"></div>
+  <div id="map" hidden></div>
   <div id="fb-slot"></div>
 </div>
 
@@ -192,9 +204,72 @@ const d = new Date(Date.now() + 21*864e5);
 d.setHours(8,0,0,0);
 $('depart').value = new Date(d - d.getTimezoneOffset()*6e4).toISOString().slice(0,16);
 
-fetch(API + '/api/cities').then(r => r.json()).then(cs => {
-  $('cities').innerHTML = cs.map(c => `<option value="${c.name}">`).join('');
-}).catch(() => {});
+const PICKED = { origin: null, destination: null };
+
+function attachAutocomplete(id) {
+  const input = $(id);
+  const wrap = input.parentElement;
+  let list = null, timer = null, items = [], cursor = -1;
+
+  const close = () => { if (list) list.remove(); list = null; cursor = -1;
+                        input.setAttribute('aria-expanded', 'false'); };
+
+  const choose = i => {
+    const it = items[i]; if (!it) return;
+    input.value = it.name;
+    PICKED[id] = it;
+    close();
+  };
+
+  const draw = () => {
+    close();
+    if (!items.length) return;
+    list = document.createElement('ul');
+    list.setAttribute('role', 'listbox');
+    list.innerHTML = items.map((it, i) =>
+      `<li role="option" data-i="${i}" aria-selected="false">${it.name}<small>${it.kind}</small></li>`).join('');
+    list.addEventListener('mousedown', e => {
+      const li = e.target.closest('li'); if (li) { e.preventDefault(); choose(+li.dataset.i); }
+    });
+    wrap.appendChild(list);
+    input.setAttribute('aria-expanded', 'true');
+  };
+
+  input.addEventListener('input', () => {
+    PICKED[id] = null;
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 2) { close(); return; }
+    // Debounced: DB rate-limits, and a request per keystroke would burn it.
+    timer = setTimeout(async () => {
+      try {
+        const r = await J('/api/locations?q=' + encodeURIComponent(q));
+        if (!r.ok) return;
+        items = await r.json();
+        draw();
+      } catch (e) { /* typeahead is a convenience, never block typing */ }
+    }, 220);
+  });
+
+  input.addEventListener('keydown', e => {
+    if (!list) return;
+    const li = list.querySelectorAll('li');
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      li[cursor]?.setAttribute('aria-selected', 'false');
+      cursor = e.key === 'ArrowDown'
+        ? (cursor + 1) % li.length : (cursor - 1 + li.length) % li.length;
+      li[cursor].setAttribute('aria-selected', 'true');
+      li[cursor].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter' && cursor >= 0) {
+      e.preventDefault(); choose(cursor);
+    } else if (e.key === 'Escape') { close(); }
+  });
+
+  input.addEventListener('blur', () => setTimeout(close, 120));
+}
+attachAutocomplete('origin');
+attachAutocomplete('destination');
 
 $('q').addEventListener('submit', async e => {
   e.preventDefault();
@@ -204,11 +279,20 @@ $('q').addEventListener('submit', async e => {
 
   const p = new URLSearchParams({
     origin: $('origin').value, destination: $('destination').value,
-    depart: $('depart').value, preset: $('preset').value,
+    preset: $('preset').value,
     vot_cents: Math.round(($('vot').value || 0) * 100),
     checked_bag: $('bag').checked, deutschlandticket: $('dticket').checked,
     bahncard: $('bc50').checked ? 50 : 0,
   });
+  p.set($('timemode').value === 'arrive' ? 'arrive_before' : 'depart', $('depart').value);
+  for (const which of ['origin', 'destination']) {
+    const pick = PICKED[which];
+    if (pick && pick.id) {
+      p.set(which + '_id', pick.id);
+      p.set(which + '_lat', pick.lat);
+      p.set(which + '_lon', pick.lon);
+    }
+  }
 
   try {
     const res = await J(`/api/plan?${p}`);

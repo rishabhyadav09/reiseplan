@@ -17,7 +17,7 @@ from .catalog import CITIES, find_city
 from .domain import Confidence, Place, PlanRequest
 from .planner import plan, weights_from
 from .providers.base import close_http
-from .providers.db_rail import resolve_station
+from .providers.db_rail import resolve_station, search_locations
 from .scoring import PRESETS
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
@@ -85,16 +85,24 @@ class PlanOut(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
-async def _resolve(text: str) -> Place:
+async def _resolve(text: str, station_id: str | None = None,
+                   lat: float | None = None, lon: float | None = None) -> Place:
+    """Prefer an explicit id or coordinates from the typeahead. Fall back to
+    the catalogue, then to a live location search, before giving up."""
+    if station_id and lat is not None and lon is not None:
+        return Place(label=text, lat=lat, lon=lon, station_id=station_id)
+
     city = find_city(text)
-    if city is None:
-        raise HTTPException(404, f"'{text}' is not in the German city catalogue yet")
-    return Place(
-        label=city.name,
-        lat=city.lat,
-        lon=city.lon,
-        station_id=await resolve_station(city.station_query),
-    )
+    if city is not None:
+        return Place(city.name, city.lat, city.lon,
+                     station_id=await resolve_station(city.station_query))
+
+    hits = await search_locations(text, limit=1)
+    if hits:
+        h = hits[0]
+        return Place(h["name"], h["lat"], h["lon"], station_id=h.get("id"))
+
+    raise HTTPException(404, f"Could not find a place called '{text}'")
 
 
 @app.get("/healthz")
@@ -170,6 +178,24 @@ async def feedback_csv(tester: str = Depends(auth.current_tester)) -> PlainTextR
     )
 
 
+@app.get("/api/locations")
+async def locations(
+    q: str = Query(..., min_length=2, max_length=80),
+    tester: str = Depends(auth.current_tester),
+) -> list[dict]:
+    """Typeahead. Falls back to the built-in catalogue if DB is unreachable,
+    so the box still works during an outage."""
+    hits = await search_locations(q)
+    if hits:
+        return hits
+    needle = q.strip().lower()
+    return [
+        {"id": None, "name": c.name, "kind": "city", "lat": c.lat, "lon": c.lon}
+        for c in CITIES.values()
+        if needle in c.name.lower()
+    ][:8]
+
+
 @app.get("/api/cities")
 async def cities() -> list[dict]:
     return [
@@ -182,7 +208,14 @@ async def cities() -> list[dict]:
 async def plan_route(
     origin: str = Query(..., min_length=2),
     destination: str = Query(..., min_length=2),
+    origin_id: str | None = None,
+    origin_lat: float | None = None,
+    origin_lon: float | None = None,
+    destination_id: str | None = None,
+    destination_lat: float | None = None,
+    destination_lon: float | None = None,
     depart: datetime | None = None,
+    arrive_before: datetime | None = None,
     preset: str = Query("balanced"),
     vot_cents: int | None = Query(None, ge=0, le=50000),
     checked_bag: bool = False,
@@ -198,8 +231,9 @@ async def plan_route(
         depart_after = depart_after.replace(tzinfo=BERLIN)
 
     req = PlanRequest(
-        origin=await _resolve(origin),
-        destination=await _resolve(destination),
+        origin=await _resolve(origin, origin_id, origin_lat, origin_lon),
+        destination=await _resolve(destination, destination_id,
+                                   destination_lat, destination_lon),
         depart_after=depart_after,
         checked_bag=checked_bag,
         has_deutschlandticket=deutschlandticket,
@@ -268,3 +302,10 @@ _WEB = Path(__file__).resolve().parents[2] / "web"
 @app.get("/")
 async def index() -> FileResponse:
     return FileResponse(_WEB / "index.html")
+
+
+@app.get("/admin")
+async def admin() -> FileResponse:
+    """Feedback dashboard. Gated by the same tester cookie as everything else —
+    good enough for a five-person round, not for anything wider."""
+    return FileResponse(_WEB / "admin.html")
