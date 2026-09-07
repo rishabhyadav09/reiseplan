@@ -43,7 +43,7 @@ from ..domain import (
     PlanRequest,
     ProviderResult,
 )
-from ..geo import CO2_G_PER_PKM
+from ..geo import CO2_G_PER_PKM, haversine_km
 from .base import UpstreamUnavailable, http
 
 log = logging.getLogger(__name__)
@@ -144,6 +144,21 @@ def _parse_ts(value: str | None) -> datetime | None:
         return None
 
 
+def _leg_km(raw: dict) -> float:
+    """MOTIS only populates `distance` on non-transit legs, so every train leg
+    reports zero. Fall back to great-circle between the leg endpoints, which
+    understates a winding route but is vastly better than calling it zero and
+    telling someone a 220 km ICE emits nothing."""
+    dist = raw.get("distance")
+    if isinstance(dist, (int, float)) and dist > 0:
+        return dist / 1000.0
+    frm, to = raw.get("from") or {}, raw.get("to") or {}
+    try:
+        return haversine_km(frm["lat"], frm["lon"], to["lat"], to["lon"])
+    except (KeyError, TypeError):
+        return 0.0
+
+
 def _classify(leg_modes: set[str]) -> Mode:
     for modes, resolved in _MODE_PRIORITY:
         if leg_modes & modes:
@@ -205,7 +220,7 @@ def itinerary_from_motis(itin: dict, *, deutschlandticket: bool = False) -> Itin
         modes_seen.add(mode)
         name = (raw.get("routeShortName") or raw.get("displayName")
                 or raw.get("headsign") or mode.replace("_", " ").title())
-        km = float(raw.get("distance") or 0) / 1000.0
+        km = _leg_km(raw)
 
         per_km = (CO2_G_PER_PKM["rail_long"] if mode in LONG_DISTANCE_MODES | NIGHT_MODES
                   else CO2_G_PER_PKM["air_domestic"] if mode in AIR_MODES

@@ -124,3 +124,23 @@ def test_waiting_between_legs_lands_in_the_envelope():
 def test_malformed_input_returns_none():
     assert itinerary_from_motis({"legs": []}) is None
     assert itinerary_from_motis({"legs": [{"mode": "RAIL"}]}) is None
+
+
+def test_transit_legs_get_emissions_from_coordinates_not_a_missing_field():
+    """MOTIS omits `distance` on transit legs. Reporting 0 kg for a 220 km ICE
+    would quietly break the low-carbon preset."""
+    dep = T0
+    it = itinerary_from_motis(itin([{
+        "mode": "HIGHSPEED_RAIL", "routeShortName": "ICE 613",
+        "startTime": dep.isoformat(),
+        "endTime": (dep + timedelta(minutes=135)).isoformat(),
+        "from": {"name": "Dortmund Hbf", "lat": 51.5177, "lon": 7.4592},
+        "to": {"name": "Frankfurt(Main)Hbf", "lat": 50.1070, "lon": 8.6638},
+    }], 135))
+    assert it.co2_g > 4000, "a 220 km train cannot emit nothing"
+    assert it.co2_g < 12000
+
+
+def test_distance_field_is_still_preferred_when_present():
+    it = itinerary_from_motis(itin([leg("COACH", 250, dist_m=231_000)], 250))
+    assert 6000 < it.co2_g < 7500   # 231 km x 29 g/pkm
