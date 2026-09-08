@@ -62,6 +62,17 @@
   .price{font-size:1.35rem;font-weight:600}
   .dur{font-size:1rem;color:var(--ink-soft)}
   .times{display:block;font-size:.9rem;font-weight:500;color:var(--ink)}
+  .more{margin-top:.9rem;border-top:1px solid var(--rule);padding-top:.7rem}
+  .more summary{cursor:pointer;font-size:.88rem;color:var(--ink-soft);list-style:none}
+  .more summary::-webkit-details-marker{display:none}
+  .more summary::before{content:"+ ";font-weight:600}
+  .more[open] summary::before{content:"− "}
+  .book{display:flex;flex-wrap:wrap;gap:.45rem;margin-top:.9rem}
+  .book a{display:inline-block;padding:.45rem .9rem;font-size:.86rem;text-decoration:none;
+    border:1px solid var(--rail);color:var(--rail);background:#fff}
+  .book a:first-child{background:var(--rail);color:#fff}
+  .book a:hover{opacity:.85}
+  .why{font-size:.78rem;color:var(--ink-soft);margin:.35rem 0 0}
   .tag{font-size:.72rem;padding:.1rem .45rem;border:1px solid var(--rule);color:var(--ink-soft);vertical-align:.15em}
   .tag.live{border-color:var(--rail);color:var(--rail)}
 
@@ -442,8 +453,12 @@ function render(body) {
         <table>${timeline}<tr><td><strong>Total</strong></td><td>${hm(o.door_to_door_minutes)}</td></tr></table>
         <table>${bill}<tr><td><strong>Out of pocket</strong></td><td>${euro(o.total_cents)}</td></tr></table>
         ${o.notes.map(n => `<p class="note">${n}</p>`).join('')}
-        ${o.deeplink ? `<p class="note"><a href="${o.deeplink}" target="_blank" rel="noopener">Book this</a></p>` : ''}
       </details>
+      <div class="book" data-testid="book">
+        ${(o.booking || []).map(b =>
+          `<a href="${b.url}" target="_blank" rel="noopener nofollow" title="${b.why}">${b.label}</a>`).join('')}
+      </div>
+      ${o.booking && o.booking.length ? `<p class="why">${o.booking[0].why}.</p>` : ''}
     </article>`;
   }).join('');
 

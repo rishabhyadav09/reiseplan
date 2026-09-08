@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 from . import anywhere as anywhere_mod
-from . import auth, feedback
+from . import auth, booking, feedback
 from .cache import cache
 from .catalog import CITIES, find_city
 from .domain import Confidence, Place, PlanRequest
@@ -75,6 +75,7 @@ class OptionOut(BaseModel):
     breakdown: dict[str, int]
     notes: list[str]
     deeplink: str | None
+    booking: list[dict]
 
 
 class PlanOut(BaseModel):
@@ -353,6 +354,12 @@ async def plan_route(
                 },
                 notes=list(s.itinerary.notes),
                 deeplink=s.itinerary.deeplink,
+                booking=[
+                    {"label": b.label, "url": b.url, "why": b.why}
+                    for b in booking.for_itinerary(
+                        s.itinerary.mode, req.origin.label,
+                        req.destination.label, depart_after)
+                ],
             )
             for s in scored
         ],
