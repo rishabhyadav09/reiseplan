@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 HTML = (Path(__file__).resolve().parents[2] / "web" / "index.html").read_text()
-SCRIPT = "\n".join(re.findall(r"<script(?![^>]*src=)[^>]*>(.*?)</script>", HTML, re.S))
+SCRIPT = "\n".join(re.findall(r"<script(?![^>]*src=)[^>]*>(.*?)</script>", HTML, re.DOTALL))
 IDS = set(re.findall(r'(?:^|\s)id="([^"]+)"', HTML))
 REFERENCED = set(re.findall(r"\$\('([^']+)'\)", SCRIPT))
 
