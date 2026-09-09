@@ -73,6 +73,14 @@
   .book a:first-child{background:var(--rail);color:#fff}
   .book a:hover{opacity:.85}
   .why{font-size:.78rem;color:var(--ink-soft);margin:.35rem 0 0}
+  .ac .clear{position:absolute;right:.35rem;bottom:.35rem;width:1.6rem;height:1.6rem;
+    padding:0;line-height:1;border:0;background:transparent;color:var(--ink-soft);
+    font-size:1.15rem;cursor:pointer;display:none}
+  .ac .clear:hover{color:var(--ink)}
+  .ac.filled .clear{display:block}
+  .ac input{padding-right:2rem}
+  .linkish{margin-top:.6rem;padding:0;border:0;background:transparent;color:var(--rail);
+    font:inherit;font-size:.88rem;cursor:pointer;text-decoration:underline}
   .tag{font-size:.72rem;padding:.1rem .45rem;border:1px solid var(--rule);color:var(--ink-soft);vertical-align:.15em}
   .tag.live{border-color:var(--rail);color:var(--rail)}
 
@@ -171,8 +179,12 @@
 
   <form id="q">
     <div class="grid">
-      <div class="ac"><label for="origin">Leaving from</label><input id="origin" data-testid="origin" value="Dortmund" autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list"></div>
-      <div class="ac"><label for="destination">Going to</label><input id="destination" data-testid="destination" value="Frankfurt am Main" autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list"></div>
+      <div class="ac"><label for="origin">Leaving from</label>
+        <input id="origin" data-testid="origin" value="Dortmund" autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list">
+        <button type="button" class="clear" data-clear="origin" data-testid="clear-origin" aria-label="Clear origin">×</button></div>
+      <div class="ac"><label for="destination">Going to</label>
+        <input id="destination" data-testid="destination" value="Frankfurt am Main" autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list">
+        <button type="button" class="clear" data-clear="destination" data-testid="clear-destination" aria-label="Clear destination">×</button></div>
       <div><label for="depart"><select id="timemode" data-testid="timemode" style="width:auto;padding:.1rem .2rem;font-size:.8rem;border:0;background:transparent;color:var(--ink-soft)"><option value="depart">Departing after</option><option value="arrive">Arriving before</option></select></label><input id="depart" data-testid="depart" type="datetime-local"></div>
       <div><label for="preset">Optimise for</label>
         <select id="preset" data-testid="preset">
@@ -310,7 +322,35 @@ function attachAutocomplete(id) {
   input.addEventListener('blur', () => setTimeout(close, 120));
 }
 attachAutocomplete('origin');
+attachAutocomplete('destination');
+attachAutocomplete('via');
 attachAutocomplete('aw-origin');
+
+// Clear buttons appear only when there is something to clear.
+function syncClear(input) {
+  input.parentElement.classList.toggle('filled', input.value.trim().length > 0);
+}
+document.querySelectorAll('.ac input').forEach(input => {
+  syncClear(input);
+  input.addEventListener('input', () => syncClear(input));
+});
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-clear]');
+  if (!btn) return;
+  const input = $(btn.dataset.clear);
+  input.value = '';
+  PICKED[btn.dataset.clear] = null;
+  syncClear(input);
+  input.focus();
+});
+
+$('swap').addEventListener('click', () => {
+  const a = $('origin'), b = $('destination');
+  [a.value, b.value] = [b.value, a.value];
+  [PICKED.origin, PICKED.destination] = [PICKED.destination, PICKED.origin];
+  syncClear(a); syncClear(b);
+  if ($('out').innerHTML) $('q').dispatchEvent(new Event('submit'));
+});
 attachAutocomplete('destination');
 
 $('tabs').addEventListener('click', e => {
@@ -386,6 +426,7 @@ $('q').addEventListener('submit', async e => {
     bahncard: $('bc50').checked ? 50 : 0,
   });
   p.set($('timemode').value === 'arrive' ? 'arrive_before' : 'depart', $('depart').value);
+  if ($('via').value.trim()) p.set('via', $('via').value.trim());
   for (const which of ['origin', 'destination']) {
     const pick = PICKED[which];
     if (pick && pick.id) {

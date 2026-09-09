@@ -279,6 +279,7 @@ async def plan_route(
     destination_lon: float | None = None,
     depart: datetime | None = None,
     arrive_before: datetime | None = None,
+    via: str | None = None,
     preset: str = Query("balanced"),
     vot_cents: int | None = Query(None, ge=0, le=50000),
     checked_bag: bool = False,
@@ -302,6 +303,7 @@ async def plan_route(
         has_deutschlandticket=deutschlandticket,
         has_bahncard=bahncard if bahncard in (25, 50) else 0,
         arrive_by=arrive_before is not None,
+        via=await _resolve(via) if via else None,
     )
 
     scored, degraded = await plan(req, weights_from(preset, vot_cents))

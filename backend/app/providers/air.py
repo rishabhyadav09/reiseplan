@@ -154,8 +154,10 @@ class AirProvider:
                     cost.append(CostLine("Airport transfers (Deutschlandticket)", 0))
 
                 notes = [
-                    "Fare is modelled, not quoted — verify before booking.",
-                    "Airport access and egress times are live DB routings.",
+                    "ESTIMATED fare — modelled from distance and how far ahead "
+                    "you are booking, not a quote. Check before deciding.",
+                    "Times include getting to the airport, security and the "
+                    "ride into town, which booking sites do not show.",
                 ]
                 if not dep.has_rail or not arr.has_rail:
                     notes.append("One airport has no direct rail link; allow extra slack.")

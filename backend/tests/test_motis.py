@@ -171,3 +171,28 @@ def test_the_final_walk_names_the_destination_not_END():
     ], 151), destination_label="Frankfurt am Main")
     assert "END" not in it.legs[-1].label
     assert "Frankfurt am Main" in it.legs[-1].label
+
+
+def test_a_via_stop_is_passed_to_the_router(monkeypatch):
+    """Multi-stop: route through a waypoint without treating it as a stopover."""
+    import asyncio
+
+    from app.domain import Place
+    from app.providers import motis
+
+    seen = {}
+
+    async def capture(path, params):
+        seen.update(params)
+        return {"itineraries": []}
+
+    monkeypatch.setattr(motis, "_get", capture)
+    from app import cache as cache_mod
+    cache_mod.cache._local.clear()
+
+    asyncio.run(motis.fetch_plan(
+        Place("A", 51.5, 7.4), Place("B", 50.1, 8.6), T0,
+        via=Place("Köln", 50.94, 6.96),
+    ))
+    assert seen["via"] == "50.94,6.96"
+    assert seen["viaMinimumStay"] == 0

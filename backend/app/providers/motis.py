@@ -343,6 +343,7 @@ async def fetch_plan(
     arrive_by: bool = False,
     results: int = 5,
     regional_only: bool = False,
+    via: Place | None = None,
 ) -> list[dict]:
     params: dict = {
         "fromPlace": _place_param(origin),
@@ -353,6 +354,9 @@ async def fetch_plan(
         "timetableView": "false",
         "detailedTransfers": "false",
     }
+    if via is not None:
+        params["via"] = _place_param(via)
+        params["viaMinimumStay"] = 0      # a routing waypoint, not a stopover
     if regional_only:
         params["transitModes"] = "REGIONAL_RAIL,REGIONAL_FAST_RAIL,SUBURBAN,TRAM,SUBWAY,BUS"
 
@@ -375,7 +379,7 @@ class MotisProvider:
         try:
             itins = await fetch_plan(
                 req.origin, req.destination, req.depart_after,
-                arrive_by=req.arrive_by, results=5,
+                arrive_by=req.arrive_by, results=5, via=req.via,
             )
             for raw in itins:
                 it = itinerary_from_motis(
