@@ -66,3 +66,15 @@ def test_the_advanced_controls_are_behind_a_disclosure():
     assert '<details class="more">' in HTML
     body_before_details = HTML.split('<details class="more">')[0]
     assert 'id="vot"' not in body_before_details
+
+
+def test_the_page_is_served_uncacheable():
+    """A tester on a cached page reports bugs fixed two deploys ago."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    with TestClient(app) as c:
+        r = c.get("/")
+    assert r.status_code == 200
+    assert "no-store" in r.headers.get("cache-control", "")
+    assert r.headers.get("x-build")

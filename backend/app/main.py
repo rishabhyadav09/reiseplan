@@ -371,13 +371,22 @@ async def plan_route(
 _WEB = Path(__file__).resolve().parents[2] / "web"
 
 
+# During a UAT round the HTML changes every deploy, and a tester looking at a
+# cached copy reports bugs that were fixed hours ago. Correctness beats the
+# few kB saved. Static assets could be hashed and cached later.
+NO_CACHE = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+}
+
+
 @app.get("/")
 async def index() -> FileResponse:
-    return FileResponse(_WEB / "index.html")
+    return FileResponse(_WEB / "index.html", headers={**NO_CACHE, "X-Build": BUILD})
 
 
 @app.get("/admin")
 async def admin() -> FileResponse:
     """Feedback dashboard. Gated by the same tester cookie as everything else —
     good enough for a five-person round, not for anything wider."""
-    return FileResponse(_WEB / "admin.html")
+    return FileResponse(_WEB / "admin.html", headers={**NO_CACHE, "X-Build": BUILD})

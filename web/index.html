@@ -253,6 +253,16 @@ function showApp(tester, build) {
   $('gate').hidden = true;
   $('app').hidden = false;
   $('who').textContent = `Signed in as ${tester} · build ${build || 'dev'}`;
+  // Stale HTML is the single most confusing thing in a UAT round: a tester
+  // reports a bug that was fixed two deploys ago. Detect and say so.
+  fetch(API + '/healthz', { cache: 'no-store' })
+    .then(r => r.json())
+    .then(h => {
+      if (build && h.build && h.build !== build) {
+        $('who').innerHTML = `Signed in as ${tester} · <b>you are viewing an old
+          version — pull down to refresh</b>`;
+      }
+    }).catch(() => {});
 }
 $('enter').addEventListener('click', async () => {
   $('gate-err').textContent = '';
