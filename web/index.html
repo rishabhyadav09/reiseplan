@@ -186,7 +186,7 @@
         <input id="destination" data-testid="destination" value="Frankfurt am Main" autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list">
         <button type="button" class="clear" data-clear="destination" data-testid="clear-destination" aria-label="Clear destination">×</button></div>
       <div><label for="depart"><select id="timemode" data-testid="timemode" style="width:auto;padding:.1rem .2rem;font-size:.8rem;border:0;background:transparent;color:var(--ink-soft)"><option value="depart">Departing after</option><option value="arrive">Arriving before</option></select></label><input id="depart" data-testid="depart" type="datetime-local"></div>
-      <div><label for="preset">Optimise for</label>
+      <div><label for="preset">What matters most</label>
         <select id="preset" data-testid="preset">
           <option value="balanced">A sensible balance</option>
           <option value="cheapest">The lowest total spend</option>
@@ -194,13 +194,27 @@
           <option value="laptop">Hours I can work</option>
           <option value="low_carbon">The smallest footprint</option>
         </select></div>
-      <div><label for="vot">An hour of my time is worth (€)</label><input id="vot" data-testid="vot" type="number" min="0" max="500" step="1" value="16"></div>
     </div>
-    <div class="toggles">
-      <label><input type="checkbox" id="bag" data-testid="bag"> I'm checking a bag</label>
-      <label><input type="checkbox" id="dticket" data-testid="dticket"> I have a Deutschlandticket</label>
-      <label><input type="checkbox" id="bc50"> I have a BahnCard 50</label>
-    </div>
+
+    <button type="button" id="swap" data-testid="swap" class="linkish">↕ Swap start and destination</button>
+
+    <details class="more">
+      <summary data-testid="more-options">Tickets I already have, and other details</summary>
+      <div class="ac" style="margin:.7rem 0">
+        <label for="via">Stop somewhere on the way (optional)</label>
+        <input id="via" data-testid="via" placeholder="e.g. Köln" autocomplete="off">
+        <button type="button" class="clear" data-clear="via" data-testid="clear-via" aria-label="Clear stop">×</button>
+      </div>
+      <div class="toggles">
+        <label><input type="checkbox" id="dticket" data-testid="dticket"> Deutschlandticket</label>
+        <label><input type="checkbox" id="bc50" data-testid="bc50"> BahnCard 50</label>
+        <label><input type="checkbox" id="bag" data-testid="bag"> Checking a bag</label>
+      </div>
+      <div style="margin-top:.7rem">
+        <label for="vot">An hour of your time is worth (€) — changes how much speed counts</label>
+        <input id="vot" data-testid="vot" type="number" min="0" max="500" step="1" value="16" style="max-width:8rem">
+      </div>
+    </details>
     <button class="go" type="submit" data-testid="compare">Compare routes</button>
   </form>
 
@@ -344,7 +358,7 @@ document.addEventListener('click', e => {
   input.focus();
 });
 
-$('swap').addEventListener('click', () => {
+$('swap')?.addEventListener('click', () => {
   const a = $('origin'), b = $('destination');
   [a.value, b.value] = [b.value, a.value];
   [PICKED.origin, PICKED.destination] = [PICKED.destination, PICKED.origin];
@@ -426,7 +440,8 @@ $('q').addEventListener('submit', async e => {
     bahncard: $('bc50').checked ? 50 : 0,
   });
   p.set($('timemode').value === 'arrive' ? 'arrive_before' : 'depart', $('depart').value);
-  if ($('via').value.trim()) p.set('via', $('via').value.trim());
+  const viaEl = $('via');
+  if (viaEl && viaEl.value.trim()) p.set('via', viaEl.value.trim());
   for (const which of ['origin', 'destination']) {
     const pick = PICKED[which];
     if (pick && pick.id) {
